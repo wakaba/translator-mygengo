@@ -10,3 +10,24 @@
 [submodule "modules/wanage"]
 	path = modules/wanage
 	url = git://github.com/wakaba/wanage.git
+[submodule "modules/perl-rdb-utils"]
+	path = modules/perl-rdb-utils
+	url = git://github.com/wakaba/perl-rdb-utils.git
+[submodule "modules/perl-json-functions-xs"]
+	path = modules/perl-json-functions-xs
+	url = git://github.com/wakaba/perl-json-functions-xs.git
+[submodule "modules/perl-web-utils"]
+	path = modules/perl-web-utils
+	url = git://github.com/wakaba/perl-web-utils.git
+[submodule "modules/perl-weburl"]
+	path = modules/perl-weburl
+	url = git://github.com/wakaba/perl-weburl.git
+[submodule "modules/perl-charclass"]
+	path = modules/perl-charclass
+	url = git://github.com/wakaba/perl-charclass.git
+[submodule "modules/perl-ooutils"]
+	path = modules/perl-ooutils
+	url = git://github.com/wakaba/perl-ooutils.git
+[submodule "modules/perl-web-useragent-functions"]
+	path = modules/perl-web-useragent-functions
+	url = git://github.com/wakaba/perl-web-useragent-functions.git
