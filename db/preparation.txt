@@ -1,0 +1,2 @@
+db mygengo
+table mygengo.sql
