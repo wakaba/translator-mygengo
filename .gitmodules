@@ -1,0 +1,12 @@
+[submodule "modules/perl-test-moremore"]
+	path = modules/perl-test-moremore
+	url = git://github.com/wakaba/perl-test-moremore.git
+[submodule "modules/perl-webservice-mygengo-lite"]
+	path = modules/perl-webservice-mygengo-lite
+	url = git://github.com/wakaba/perl-webservice-mygengo-lite.git
+[submodule "modules/dongry"]
+	path = modules/dongry
+	url = git://github.com/wakaba/dongry.git
+[submodule "modules/wanage"]
+	path = modules/wanage
+	url = git://github.com/wakaba/wanage.git
