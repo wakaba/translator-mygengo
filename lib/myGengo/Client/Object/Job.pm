@@ -66,6 +66,10 @@ sub eta ($) {
   return $_[0]->data->{quote}->{eta};
 } # eta
 
+sub captcha_image_url ($) {
+  return $_[0]->data->{captcha_url};
+} # captcha_image_url
+
 sub data ($) {
   return $_[0]->{data} ||= $_[0]->row->get ('data');
 } # data
@@ -79,6 +83,16 @@ sub preview_path ($) {
   my $self = shift;
   return "/job/" . $self->job_id . '/preview';
 } # preview_path
+
+sub approve_path ($) {
+  my $self = shift;
+  return '/job/' . $self->job_id . '/approve';
+} # approve_path
+
+sub reject_path ($) {
+  my $self = shift;
+  return '/job/' . $self->job_id . '/reject';
+} # reject_path
 
 sub as_jsonable ($) {
   my $self = shift;

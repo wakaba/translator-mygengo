@@ -75,6 +75,29 @@ sub lang_options () {
   } qw(ja en fr);
 } # lang_options
 
+sub sync_jobs_from_res ($) {
+  my $res = shift;
+  return if $res->is_error;
+  
+  require myGengo::Client::MySQL;
+  require Dongry::Database;
+  my $db = Dongry::Database->load ('mygengo');
+  
+  for my $job (@{$res->jobs || []}) {
+    $db->table ('job')->insert ([{
+      id => $job->{job_id},
+      source_lang => $job->{source}->{lang} // '',
+      source_body => $job->{source}->{body} // '',
+      target_lang => $job->{target}->{lang} // '',
+      target_body => $job->{target}->{body} // '',
+      job_created => $job->{ctime},
+      status => $job->{status},
+      data => {%$job},
+      updated => time,
+    }], duplicate => 'replace');
+  }
+} # sync_jobs_from_res
+
 sub process ($$) {
   my $app = $_[1];
   my $http = $app->http;
@@ -242,6 +265,61 @@ sub process ($$) {
         </table>
 
         <section>
+          <h2>Actions</h2>
+
+          <menu>
+            <li>Approve:
+              <form action="%s" method=POST>
+                <table>
+                  <tbody>
+                    <tr>
+                      <th>Comment
+                      <td><textarea name=comment></textarea>
+                  <tfoot>
+                    <tr>
+                      <td colspan=2>
+                        <button type=submit>
+                          Approve
+                        </button>
+                </table>
+              </form>
+            <li>Reject:
+              <form action="%s" method=POST>
+                <table>
+                  <tbody>
+                    <tr>
+                      <th>Reason
+                      <td>
+                        <select name=reason>
+                          <option value=quality>Quality
+                          <option value=incomplete>Incomplete
+                          <option value=other>Other
+                        </select>
+                    <tr>
+                      <th>Follow-up
+                      <td>
+                        <select name=follow-up>
+                          <option value=requeue>Requeue
+                          <option value=cancel>Cancel
+                        </select>
+                    <tr>
+                      <th>Comment
+                      <td><textarea name=comment></textarea>
+                    <tr>
+                      <th><img src="%s">
+                      <td><input name=captcha>
+                  <tfoot>
+                    <tr>
+                      <td colspan=2>
+                        <button type=submit>
+                          Reject
+                        </button>
+                </table>
+             </form>
+          </menu>
+        </section>
+
+        <section>
           <h2>Job data dump</h2>
           <pre>%s</pre>
         </section>
@@ -261,6 +339,9 @@ sub process ($$) {
           htescape $job->tier,
           htescape price $job->credits,
           htescape time_amount $job->eta,
+          htescape $job->approve_path,
+          htescape $job->reject_path,
+          htescape $job->captcha_image_url,
           htescape Dumper $job->data;
       $app->send_html ($html);
       $app->throw;
@@ -268,8 +349,6 @@ sub process ($$) {
       $app->requires_mygengo_keys_from_auth;
       $app->requires_request_method ({POST => 1});
       
-      require myGengo::Client::MySQL;
-      require Dongry::Database;
       require WebService::myGengo::Lite;
       
       my $ws = WebService::myGengo::Lite->new
@@ -282,22 +361,7 @@ sub process ($$) {
       $res = $ws->jobs_get ([map { $_->{job_id} } @{$res->data}]);
       $app->throw_error (400) if $res->is_error;
       
-      my $db = Dongry::Database->load ('mygengo');
-      
-      for my $job (@{$res->jobs}) {
-        $db->table ('job')->insert ([{
-          id => $job->{job_id},
-          source_lang => $job->{source}->{lang} // '',
-          source_body => $job->{source}->{body} // '',
-          target_lang => $job->{target}->{lang} // '',
-          target_body => $job->{target}->{body} // '',
-          job_created => $job->{ctime},
-          status => $job->{status},
-          data => {%$job},
-          updated => time,
-        }], duplicate => 'replace');
-      }
-      
+      sync_jobs_from_res $res;
       $app->throw_redirect ('/job/');
     } elsif ($path->[1] eq 'submit') {
       if ($http->request_method eq 'POST') {
@@ -311,6 +375,7 @@ sub process ($$) {
             (api_key => $http->request_auth->{userid},
              private_key => $http->request_auth->{password});
 
+        use Data::Dumper;
         my $job = $ws->create_job_request
             (source => {
                lang => $app->bare_param ('source-lang'),
@@ -322,26 +387,11 @@ sub process ($$) {
              tier => $app->bare_param ('tier'));
         my $res = $ws->job_post ([$job]);
         unless ($res->is_error) {
-          require myGengo::Client::MySQL;
-          require Dongry::Database;
-          my $db = Dongry::Database->load ('mygengo');
-          for my $job (@{$res->jobs}) {
-            $db->table ('job')->insert ([{
-              id => $job->{job_id},
-              source_lang => $job->{source}->{lang} // '',
-              source_body => $job->{source}->{body} // '',
-              target_lang => $job->{target}->{lang} // '',
-              target_body => $job->{target}->{body} // '',
-              job_created => $job->{ctime},
-              status => $job->{status},
-              data => {%$job},
-              updated => time,
-            }], duplicate => 'replace');
-          }
+          sync_jobs_from_res $res;
           $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
         } else {
           $http->set_status (400);
-          $http->send_plain_text (Dumper {
+          $app->send_plain_text (Dumper {
             error_message => $res->error_message,
             error_details => $res->error_details,
           });
@@ -401,8 +451,10 @@ sub process ($$) {
         $app->throw;
       }
     }
-  } elsif (@$path == 3 and $path->[0] eq 'job' and $path->[2] eq 'preview') {
-    if ($path->[1] =~ /\A[0-9]+\z/) {
+  } elsif (@$path == 3 and
+           $path->[0] eq 'job' and
+           $path->[1] =~ /\A[0-9]+\z/) {
+    if ($path->[2] eq 'preview') {
       $app->requires_mygengo_keys_from_auth;
       require WebService::myGengo::Lite;
       my $ws = WebService::myGengo::Lite->new
@@ -414,6 +466,57 @@ sub process ($$) {
       #$http->set_response_header ('Content-Type' => 'image/jpeg');
       #$http->send_response_body_as_ref (\($res->image_as_bytes));
       #$app->throw;
+    } elsif ($path->[2] eq 'approve') {
+      $app->requires_no_csrf;
+      $app->requires_mygengo_keys_from_auth;
+      $app->requires_request_method ({POST => 1});
+      
+      require WebService::myGengo::Lite;
+      
+      my $ws = WebService::myGengo::Lite->new
+          (api_key => $http->request_auth->{userid},
+           private_key => $http->request_auth->{password});
+      my $res = $ws->job_approve
+          ($path->[1],
+           comment_for_translator => $app->text_param ('comment'));
+      if ($res->is_error) {
+        $http->set_status (400);
+        $app->send_plain_text (Dumper {
+          error_message => $res->error_message,
+          error_details => $res->error_details,
+        });
+        $app->throw;
+      } else {
+        sync_jobs_from_res $ws->job_get ($path->[1]);
+        $app->throw_redirect (q</job/> . $path->[1]);
+      }
+    } elsif ($path->[2] eq 'reject') {
+      $app->requires_no_csrf;
+      $app->requires_mygengo_keys_from_auth;
+      $app->requires_request_method ({POST => 1});
+      
+      require WebService::myGengo::Lite;
+      
+      my $ws = WebService::myGengo::Lite->new
+          (api_key => $http->request_auth->{userid},
+           private_key => $http->request_auth->{password});
+      my $res = $ws->job_reject
+          ($path->[1],
+           reason => $app->bare_param ('reason'),
+           captcha => $app->text_param ('captcha'),
+           follow_up => $app->text_param ('follow-up'),
+           comment_for_translator => $app->text_param ('comment'));
+      if ($res->is_error) {
+        $http->set_status (400);
+        $app->send_plain_text (Dumper {
+          error_message => $res->error_message,
+          error_details => $res->error_details,
+        });
+        $app->throw;
+      } else {
+        sync_jobs_from_res $ws->job_get ($path->[1]);
+        $app->throw_redirect (q</job/> . $path->[1]);
+      }
     }
   } elsif (@$path == 2 and $path->[0] eq 'css') {
     if ($path->[1] eq 'mygengo-client') {
@@ -468,6 +571,7 @@ sub process ($$) {
           padding: 0.2em;
         }
 
+        td input:not([type]),
         td textarea {
           width: 100%;
         }
