@@ -21,6 +21,7 @@ $Dongry::Database::Registry->{mygengo} = {
         source_body => 'text',
         target_body => 'text',
         data => 'json',
+        job_created => 'timestamp',
         updated => 'timestamp',
         approved => 'timestamp',
       },

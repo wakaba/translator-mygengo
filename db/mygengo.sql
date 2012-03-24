@@ -7,9 +7,11 @@ CREATE TABLE job (
   target_body BLOB NOT NULL,
   status VARCHAR(15) NOT NULL,
   data MEDIUMBLOB NOT NULL,
+  job_created TIMESTAMP NOT NULL DEFAULT 0,
   updated TIMESTAMP NOT NULL DEFAULT 0,
   approved TIMESTAMP NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
+  KEY (job_created),
   KEY (updated),
   KEY (status, updated),
   KEY (approved)

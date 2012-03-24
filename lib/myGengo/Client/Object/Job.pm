@@ -30,6 +30,10 @@ sub target_body ($) {
   return $_[0]->row->get ('target_body');
 } # target_body
 
+sub target_has_preview ($) {
+  return !!$_[0]->data->{target}->{preview_image_url};
+} # target_has_preview
+
 sub target_is_machine_translation ($) {
   return $_[0]->data->{target}->{is_machine_translation};
 } # target_is_machine_translation
@@ -70,6 +74,11 @@ sub path ($) {
   my $self = shift;
   return "/job/" . $self->job_id;
 } # path
+
+sub preview_path ($) {
+  my $self = shift;
+  return "/job/" . $self->job_id . '/preview';
+} # preview_path
 
 sub as_jsonable ($) {
   my $self = shift;

@@ -92,7 +92,7 @@ sub process ($$) {
            where => {
                id => {-ne => undef},
            },
-           order => [updated => 'desc'],
+           order => [updated => 'desc', job_created => 'desc'],
            item_list_filter => sub {
              return $_[1]->map (sub {
                return myGengo::Client::Object::Job->new_from_row ($_);
@@ -102,7 +102,14 @@ sub process ($$) {
       if ($path->[1] eq 'index.json') {
         $app->send_json ($jobs->map (sub { $_->as_jsonable }));
       } else {
-        my $job_trs  = join '', map {
+        my $job_trs = join '', map {
+          my $target_html = htescape $_->target_body;
+          if ($target_html eq '' and 
+              $_->target_has_preview) {
+            $target_html = sprintf q{<img src="%s">},
+                $_->preview_path;
+          }
+
           sprintf q{
             <tr>
               <th title="Updated: %s"><a href="%s">%d</a>
@@ -118,7 +125,7 @@ sub process ($$) {
               htescape lang $_->source_lang,
               htescape $_->source_lang, htescape $_->source_body,
               htescape lang $_->target_lang,
-              htescape $_->target_lang, htescape $_->target_body,
+              htescape $_->target_lang, $target_html,
               htescape $_->status;
         } @$jobs;
 
@@ -173,6 +180,13 @@ sub process ($$) {
       my $row = $db->table ('job')->find ({id => $path->[1]});
       $app->throw_code (404) unless $row;
       my $job = myGengo::Client::Object::Job->new_from_row ($row);
+
+      my $target_html = htescape $job->target_body;
+      if ($target_html eq '' and 
+          $job->target_has_preview) {
+        $target_html = sprintf q{<img src="%s">},
+            $job->preview_path;
+      }
       
       my $html = sprintf q{ 
         <!DOCTYPE HTML>
@@ -239,7 +253,7 @@ sub process ($$) {
           htescape $job->source_lang, htescape $job->source_body,
           htescape $job->unit_count,
           htescape lang $job->target_lang,
-          htescape $job->target_lang, htescape $job->target_body,
+          htescape $job->target_lang, $target_html,
           htescape boolean $job->target_is_machine_translation,
           htescape $job->status,
           htescape boolean $job->auto_approve,
@@ -277,6 +291,7 @@ sub process ($$) {
           source_body => $job->{source}->{body} // '',
           target_lang => $job->{target}->{lang} // '',
           target_body => $job->{target}->{body} // '',
+          job_created => $job->{ctime},
           status => $job->{status},
           data => {%$job},
           updated => time,
@@ -317,6 +332,7 @@ sub process ($$) {
               source_body => $job->{source}->{body} // '',
               target_lang => $job->{target}->{lang} // '',
               target_body => $job->{target}->{body} // '',
+              job_created => $job->{ctime},
               status => $job->{status},
               data => {%$job},
               updated => time,
@@ -384,6 +400,20 @@ sub process ($$) {
         $app->send_html ($html);
         $app->throw;
       }
+    }
+  } elsif (@$path == 3 and $path->[0] eq 'job' and $path->[2] eq 'preview') {
+    if ($path->[1] =~ /\A[0-9]+\z/) {
+      $app->requires_mygengo_keys_from_auth;
+      require WebService::myGengo::Lite;
+      my $ws = WebService::myGengo::Lite->new
+          (api_key => $http->request_auth->{userid},
+           private_key => $http->request_auth->{password});
+      $app->throw_redirect ($ws->job_preview_url ($path->[1]));
+      #my $res = $ws->job_preview ($path->[1]);
+      #$app->throw_code (404) if $res->is_error;
+      #$http->set_response_header ('Content-Type' => 'image/jpeg');
+      #$http->send_response_body_as_ref (\($res->image_as_bytes));
+      #$app->throw;
     }
   } elsif (@$path == 2 and $path->[0] eq 'css') {
     if ($path->[1] eq 'mygengo-client') {
