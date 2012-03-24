@@ -1,6 +1,7 @@
 package myGengo::Client::Web;
 use strict;
 use warnings;
+use Data::Dumper;
 
 sub htescape ($) {
   my $s = $_[0];
@@ -43,9 +44,36 @@ sub time_amount ($) {
   return join ' ', @v;
 } # time_amount
 
+sub lang ($) {
+  return {
+    ja => 'Japanese',
+    en => 'English',
+    fr => 'French',
+  }->{$_[0]} || $_[0];
+} # lang
+
 sub boolean ($) {
   return $_[0] ? 'Yes' : 'No';
 } # boolean
+
+sub header_html () {
+  return sprintf q{
+    <header>
+      <h1>myGengo Jobs</h1>
+      <nav>
+        <a href="/job/">Jobs</a>
+      </nav>
+    </header>
+  };
+} # header_html
+
+sub lang_options () {
+  join '', map {
+    sprintf '<option value="%s">%s',
+        htescape $_,
+        htescape lang $_,
+  } qw(ja en fr);
+} # lang_options
 
 sub process ($$) {
   my $app = $_[1];
@@ -79,15 +107,17 @@ sub process ($$) {
             <tr>
               <th title="Updated: %s"><a href="%s">%d</a>
               <td>%s
+              <td lang="%s">%s
               <td>%s
-              <td>%s
-              <td>%s
+              <td lang="%s">%s
               <td>%s
           },
               htescape timestamp $_->updated,
               htescape $_->path,
               $_->job_id,
+              htescape lang $_->source_lang,
               htescape $_->source_lang, htescape $_->source_body,
+              htescape lang $_->target_lang,
               htescape $_->target_lang, htescape $_->target_body,
               htescape $_->status;
         } @$jobs;
@@ -97,6 +127,7 @@ sub process ($$) {
           <html lang=en>
           <title>Jobs</title>
           <link rel=stylesheet href="/css/mygengo-client">
+          %s
           <h1>Jobs</h1>
           <table>
             <thead>
@@ -119,13 +150,17 @@ sub process ($$) {
           <section>
             <h2>Actions</h2>
 
-            <form action=/job/sync method=POST>
-              <button type=submit>
-                Sync recent jobs
-              </button>
-            </form>
+            <menu>
+              <li><a href=/job/submit>Submit jobs</a>
+              <li>
+                <form action=/job/sync method=POST>
+                  <button type=submit>
+                    Sync recent jobs
+                  </button>
+                </form>
+            </menu>
           </section>
-        }, $job_trs;
+        }, header_html, $job_trs;
         $app->send_html ($html);
       }
       $app->throw;
@@ -133,7 +168,6 @@ sub process ($$) {
       require Dongry::Database;
       require myGengo::Client::MySQL;
       require myGengo::Client::Object::Job;
-      require Data::Dumper;
 
       my $db = Dongry::Database->load ('mygengo');
       my $row = $db->table ('job')->find ({id => $path->[1]});
@@ -142,8 +176,10 @@ sub process ($$) {
       
       my $html = sprintf q{ 
         <!DOCTYPE HTML>
+        <html lang=en>
         <title>Job #%d</title>
         <link rel=stylesheet href="/css/mygengo-client">
+        %s
         <h1>Job #%d</h1>
         <table>
           <tbody>
@@ -153,7 +189,7 @@ sub process ($$) {
               <td>%s
             <tr>
               <th>Text
-              <td>%s
+              <td lang="%s">%s
             <tr>
               <th>Unit count
               <td>%d
@@ -164,7 +200,7 @@ sub process ($$) {
               <td>%s
             <tr>
               <th>Text
-              <td>%s
+              <td lang="%s">%s
             <tr>
               <th>Is machine-translation
               <td>%s
@@ -196,9 +232,13 @@ sub process ($$) {
           <pre>%s</pre>
         </section>
       },
-          $job->job_id, $job->job_id,
+          $job->job_id,
+          header_html,
+          $job->job_id,
+          htescape lang $job->source_lang,
           htescape $job->source_lang, htescape $job->source_body,
           htescape $job->unit_count,
+          htescape lang $job->target_lang,
           htescape $job->target_lang, htescape $job->target_body,
           htescape boolean $job->target_is_machine_translation,
           htescape $job->status,
@@ -207,17 +247,11 @@ sub process ($$) {
           htescape $job->tier,
           htescape price $job->credits,
           htescape time_amount $job->eta,
-          htescape Data::Dumper::Dumper ($job->data);
+          htescape Dumper $job->data;
       $app->send_html ($html);
       $app->throw;
     } elsif ($path->[1] eq 'sync') {
-      if (($http->request_auth->{auth_scheme} // '') ne 'basic') {
-        $http->set_status (401);
-        $http->set_response_auth
-            ('basic', realm => 'myGengo API key and private key');
-        $app->send_plain_text (401);
-        $app->throw;
-      }
+      $app->requires_mygengo_keys_from_auth;
       $app->requires_request_method ({POST => 1});
       
       require myGengo::Client::MySQL;
@@ -250,6 +284,106 @@ sub process ($$) {
       }
       
       $app->throw_redirect ('/job/');
+    } elsif ($path->[1] eq 'submit') {
+      if ($http->request_method eq 'POST') {
+        $app->requires_no_csrf;
+        $app->requires_mygengo_keys_from_auth;
+        $app->requires_request_method ({POST => 1});
+        
+        require WebService::myGengo::Lite;
+        
+        my $ws = WebService::myGengo::Lite->new
+            (api_key => $http->request_auth->{userid},
+             private_key => $http->request_auth->{password});
+
+        my $job = $ws->create_job_request
+            (source => {
+               lang => $app->bare_param ('source-lang'),
+               body => $app->text_param ('source-body'),
+             },
+             target => {
+               lang => $app->bare_param ('target-lang'),
+             },
+             tier => $app->bare_param ('tier'));
+        my $res = $ws->job_post ([$job]);
+        unless ($res->is_error) {
+          require myGengo::Client::MySQL;
+          require Dongry::Database;
+          my $db = Dongry::Database->load ('mygengo');
+          for my $job (@{$res->jobs}) {
+            $db->table ('job')->insert ([{
+              id => $job->{job_id},
+              source_lang => $job->{source}->{lang} // '',
+              source_body => $job->{source}->{body} // '',
+              target_lang => $job->{target}->{lang} // '',
+              target_body => $job->{target}->{body} // '',
+              status => $job->{status},
+              data => {%$job},
+              updated => time,
+            }], duplicate => 'replace');
+          }
+          $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
+        } else {
+          $http->set_status (400);
+          $http->send_plain_text (Dumper {
+            error_message => $res->error_message,
+            error_details => $res->error_details,
+          });
+          $app->throw;
+        }
+      } else {
+        my $html = sprintf q{
+          <!DOCTYPE HTML>
+          <html lang=en>
+          <title>Submit jobs</title>
+          <link rel=stylesheet href="/css/mygengo-client">
+          %s
+          <h1>Submit jobs</h1>
+
+          <form action="/job/submit" method=POST>
+
+            <section>
+              <table>
+                <tbody>
+                  <tr>
+                    <th rowspan=2>Source
+                    <th>Language
+                    <td>
+                      <select name=source-lang>%s</select>
+                  <tr>
+                    <th>Text
+                    <td>
+                      <textarea name=source-body></textarea>
+                <tbody>
+                  <tr>
+                    <th>Target
+                    <th>Language
+                    <td>
+                      <select name=target-lang>%s</select>
+                <tbody>
+                  <tr>
+                    <th colspan=2>Quality level
+                    <td>
+                      <select name=tier>
+                        <option value=machine>Machine
+                        <option value=standard>Standard
+                        <option value=pro>Pro
+                        <option value=ultra>Ultra
+                      </select>
+                <tfoot>
+                  <tr>
+                    <td colspan=3>
+                      <button type=submit>
+                        Submit
+                      </button>
+              </table>
+            </section>
+
+          </form>
+        }, header_html, lang_options, lang_options;
+        $app->send_html ($html);
+        $app->throw;
+      }
     }
   } elsif (@$path == 2 and $path->[0] eq 'css') {
     if ($path->[1] eq 'mygengo-client') {
@@ -268,6 +402,25 @@ sub process ($$) {
           font-size: 130%;
         }
 
+        header {
+          display: block;
+          position: relative;
+          border: 1px solid #AAAAAA;
+          background-color: #F9F9F9;
+          color: blank;
+          padding: 0.4em;
+        }
+        header h1 {
+          background-color: transparent;
+          margin: 0;
+        }
+        header nav {
+          display: block;
+          position: absolute;
+          top: 0.7em;
+          right: 0.7em;
+        }
+
         section {
           display: block;
           margin: 1em;
@@ -283,6 +436,22 @@ sub process ($$) {
         }
         th, td {
           padding: 0.2em;
+        }
+
+        td textarea {
+          width: 100%;
+        }
+
+        tfoot td {
+          text-align: center;
+        }
+
+        menu li {
+          padding: 0.3em;
+        }
+
+        pre {
+          white-space: pre-wrap;
         }
       });
       $app->throw;
