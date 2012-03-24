@@ -30,16 +30,40 @@ sub target_body ($) {
   return $_[0]->row->get ('target_body');
 } # target_body
 
+sub target_is_machine_translation ($) {
+  return $_[0]->data->{target}->{is_machine_translation};
+} # target_is_machine_translation
+
 sub status ($) {
   return $_[0]->row->get ('status');
 } # status
+
+sub auto_approve ($) {
+  return $_[0]->data->{auto_approve};
+} # auto_approve
 
 sub updated ($) {
   return $_[0]->row->get ('updated');
 } # updated
 
+sub tier ($) {
+  return $_[0]->data->{tier};
+} # tier
+
+sub unit_count ($) {
+  return $_[0]->data->{quote}->{unit_count};
+} # unit_count
+
+sub credits ($) {
+  return $_[0]->data->{quote}->{credits};
+} # credits
+
+sub eta ($) {
+  return $_[0]->data->{quote}->{eta};
+} # eta
+
 sub data ($) {
-  return $_[0]->row->get ('data');
+  return $_[0]->{data} ||= $_[0]->row->get ('data');
 } # data
 
 sub path ($) {
