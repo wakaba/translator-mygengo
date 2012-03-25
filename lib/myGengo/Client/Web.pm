@@ -376,8 +376,11 @@ sub process ($$) {
                       <th>Comment
                       <td><textarea name=comment></textarea>
                     <tr>
-                      <th><img src="%s">
-                      <td><input name=captcha>
+                      <th><img src="%s" onload="
+                        this.removeAttribute ('alt');
+                      " alt="CAPTCHA image error">
+                      <td><input name=captcha autocomplete=off
+                          placeholder="Input the shown text">
                   <tfoot>
                     <tr>
                       <td colspan=2>
@@ -416,40 +419,27 @@ sub process ($$) {
       $app->send_html ($html);
       $app->throw;
     } elsif ($path->[1] eq 'sync') {
-      $app->requires_mygengo_keys_from_auth;
       $app->requires_request_method ({POST => 1});
-      
-      require WebService::myGengo::Lite;
-      
-      my $ws = WebService::myGengo::Lite->new
-          (api_key => $http->request_auth->{userid},
-           private_key => $http->request_auth->{password});
+      my $ws = $app->mygengo_webservice;
       
       my $res = $ws->job_list (count => 100);
-      $app->throw_error (400) if $res->is_error;
+      $app->throw_mygengo_error ($res) if $res->is_error;
       
       $res = $ws->jobs_get ([map { $_->{job_id} } @{$res->data}]);
-      $app->throw_error (400) if $res->is_error;
+      $app->throw_mygengo_error ($res) if $res->is_error;
       
       sync_jobs_from_res $res;
       $app->throw_redirect ('/job/');
     } elsif ($path->[1] eq 'submit') {
       if ($http->request_method eq 'POST') {
         $app->requires_no_csrf;
-        $app->requires_mygengo_keys_from_auth;
         $app->requires_request_method ({POST => 1});
-        
-        require WebService::myGengo::Lite;
-        
-        my $ws = WebService::myGengo::Lite->new
-            (api_key => $http->request_auth->{userid},
-             private_key => $http->request_auth->{password});
+        my $ws = $app->mygengo_webservice;
 
         my $source_lang = $app->bare_param ('source-lang');
         my $target_lang = $app->bare_param ('target-lang');
         my $tier = $app->bare_param ('tier');
 
-        use Data::Dumper;
         my $jobs = $app->text_param_list ('source-body')->map (sub {
           $ws->create_job_request
               (source => {lang => $source_lang, body => $_},
@@ -457,17 +447,9 @@ sub process ($$) {
                tier => $tier);
         });
         my $res = $ws->job_post ($jobs);
-        unless ($res->is_error) {
-          sync_jobs_from_res $res;
-          $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
-        } else {
-          $http->set_status (400);
-          $app->send_plain_text (Dumper {
-            error_message => $res->error_message,
-            error_details => $res->error_details,
-          });
-          $app->throw;
-        }
+        $app->throw_mygengo_error ($res) if $res->is_error;
+        sync_jobs_from_res $res;
+        $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
       } else {
         my $html = sprintf q{
           <!DOCTYPE HTML>
@@ -539,11 +521,7 @@ sub process ($$) {
            $path->[0] eq 'job' and
            $path->[1] =~ /\A[0-9]+\z/) {
     if ($path->[2] eq 'preview') {
-      $app->requires_mygengo_keys_from_auth;
-      require WebService::myGengo::Lite;
-      my $ws = WebService::myGengo::Lite->new
-          (api_key => $http->request_auth->{userid},
-           private_key => $http->request_auth->{password});
+      my $ws = $app->mygengo_webservice;
       $app->throw_redirect ($ws->job_preview_url ($path->[1]));
       #my $res = $ws->job_preview ($path->[1]);
       #$app->throw_code (404) if $res->is_error;
@@ -552,55 +530,27 @@ sub process ($$) {
       #$app->throw;
     } elsif ($path->[2] eq 'approve') {
       $app->requires_no_csrf;
-      $app->requires_mygengo_keys_from_auth;
       $app->requires_request_method ({POST => 1});
-      
-      require WebService::myGengo::Lite;
-      
-      my $ws = WebService::myGengo::Lite->new
-          (api_key => $http->request_auth->{userid},
-           private_key => $http->request_auth->{password});
+      my $ws = $app->mygengo_webservice;
       my $res = $ws->job_approve
           ($path->[1],
            comment_for_translator => $app->text_param ('comment'));
-      if ($res->is_error) {
-        $http->set_status (400);
-        $app->send_plain_text (Dumper {
-          error_message => $res->error_message,
-          error_details => $res->error_details,
-        });
-        $app->throw;
-      } else {
-        sync_jobs_from_res $ws->job_get ($path->[1]);
-        $app->throw_redirect (q</job/> . $path->[1]);
-      }
+      $app->throw_mygengo_error ($res) if $res->is_error;
+      sync_jobs_from_res $ws->job_get ($path->[1]);
+      $app->throw_redirect (q</job/> . $path->[1]);
     } elsif ($path->[2] eq 'reject') {
       $app->requires_no_csrf;
-      $app->requires_mygengo_keys_from_auth;
       $app->requires_request_method ({POST => 1});
-      
-      require WebService::myGengo::Lite;
-      
-      my $ws = WebService::myGengo::Lite->new
-          (api_key => $http->request_auth->{userid},
-           private_key => $http->request_auth->{password});
+      my $ws = $app->mygengo_webservice;
       my $res = $ws->job_reject
           ($path->[1],
            reason => $app->bare_param ('reason'),
            captcha => $app->text_param ('captcha'),
            follow_up => $app->text_param ('follow-up'),
            comment_for_translator => $app->text_param ('comment'));
-      if ($res->is_error) {
-        $http->set_status (400);
-        $app->send_plain_text (Dumper {
-          error_message => $res->error_message,
-          error_details => $res->error_details,
-        });
-        $app->throw;
-      } else {
-        sync_jobs_from_res $ws->job_get ($path->[1]);
-        $app->throw_redirect (q</job/> . $path->[1]);
-      }
+      $app->throw_mygengo_error ($res) if $res->is_error;
+      sync_jobs_from_res $ws->job_get ($path->[1]);
+      $app->throw_redirect (q</job/> . $path->[1]);
     }
   } elsif (@$path == 2 and $path->[0] eq 'css') {
     if ($path->[1] eq 'mygengo-client') {
@@ -661,6 +611,10 @@ sub process ($$) {
           width: 40%;
           margin-left: auto;
           margin-right: 0;
+        }
+
+        form table th {
+          width: 30%;
         }
 
         th {

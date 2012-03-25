@@ -40,5 +40,29 @@ sub requires_mygengo_keys_from_auth ($) {
   }
 } # requires_mygengo_keys_from_auth
 
+sub mygengo_webservice ($) {
+  my $self = shift;
+  return $self->{mygengo_webservice} ||= do {
+    $self->requires_mygengo_keys_from_auth;
+    my $http = $self->http;
+    
+    require WebService::myGengo::Lite;
+    WebService::myGengo::Lite->new
+        (api_key => $http->request_auth->{userid},
+         private_key => $http->request_auth->{password});
+  };
+} # mygengo_webservice
+
+sub throw_mygengo_error ($$) {
+  my ($self, $res) = @_;
+  require Data::Dumper;
+  $self->http->set_status (400);
+  $self->send_plain_text (Data::Dumper::Dumper ({
+    error_message => $res->error_message,
+    error_details => $res->error_details,
+  }));
+  $self->throw;
+} # throw_mygengo_error
+
 1;
 
