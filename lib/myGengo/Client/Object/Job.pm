@@ -91,6 +91,26 @@ sub comments_synced_time ($) {
   return $_[0]->row->get ('comments_updated');
 } # comments_synced_time
 
+sub feedback ($) {
+  return $_[0]->{feedback} ||= $_[0]->row->get ('feedback') || {};
+} # feedback
+
+sub has_feedback ($) {
+  return ($_[0]->feedback and keys %{$_[0]->feedback});
+} # has_feedback
+
+sub feedback_rating ($) {
+  return $_[0]->feedback->{rating};
+} # feedback_rating
+
+sub feedback_comment_for_translator ($) {
+  return $_[0]->feedback->{for_translator};
+} # feedback_comment_for_translator
+
+sub feedback_synced_time ($) {
+  return $_[0]->row->get ('feedback_updated');
+} # feedback_synced_time
+
 sub path ($) {
   my $self = shift;
   return "/job/" . $self->job_id;
@@ -125,6 +145,22 @@ sub comments_sync_path ($) {
   my $self = shift;
   return '/job/' . $self->job_id . '/comment/sync';
 } # comments_sync_path
+
+sub feedback_sync_path ($) {
+  my $self = shift;
+  return '/job/' . $self->job_id . '/feedback/sync';
+} # feedback_sync_path
+
+sub as_dumpable ($) {
+  my $self = shift;
+  my $row = $self->row;
+  return {
+    id => $self->job_id,
+    data => $row->get ('data'),
+    comments => $row->get ('comments'),
+    feedback => $row->get ('feedback'),
+  };
+} # as_dumpable
 
 sub as_jsonable ($) {
   my $self = shift;

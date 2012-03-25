@@ -313,7 +313,23 @@ sub process ($$) {
             htescape author_type $comment->author_type,
             htescape timestamp $comment->created;
       })->join ('');
-      
+
+      my $feedback_html = '';
+      if ($job->has_feedback) {
+        $feedback_html = sprintf q{
+          <article>
+            <h3>Feedback</h3>
+            <p>%s (%s)
+            <footer>
+              <p>%s
+            </footer>
+          </article>
+        },
+            htescape $job->feedback_comment_for_translator,
+            htescape $job->feedback_rating,
+            htescape author_type 'customer';
+      }
+
       my $html = sprintf q{ 
         <!DOCTYPE HTML>
         <html lang=en>
@@ -376,8 +392,16 @@ sub process ($$) {
                 <table>
                   <tbody>
                     <tr>
-                      <th>Comment
+                      <th>Comment for translator
                       <td><textarea name=comment></textarea>
+                    <tr>
+                      <th>Comment for myGengo
+                      <td>
+                        <textarea name=comment-for-mygengo></textarea>
+                        <p><label>
+                          <input type=checkbox name=comment-is-public>
+                          Public
+                        </label>
                   <tfoot>
                     <tr>
                       <td colspan=2>
@@ -430,6 +454,8 @@ sub process ($$) {
 
           %s
 
+          %s
+
           <article>
             <form action="%s" method=post>
               <table>
@@ -451,6 +477,10 @@ sub process ($$) {
           <menu>
             <li><form action="%s" method=post>
               <button type=submit>Sync comments</button>
+              (Last synced: %s)
+            </form>
+            <li><form action="%s" method=post>
+              <button type=submit>Sync feedback</button>
               (Last synced: %s)
             </form>
           </menu>
@@ -480,10 +510,13 @@ sub process ($$) {
           htescape $job->reject_path,
           htescape $job->captcha_image_url,
           $comments_html,
+          $feedback_html,
           htescape $job->comment_post_path,
           htescape $job->comments_sync_path,
           htescape timestamp $job->comments_synced_time,
-          htescape Dumper $job->data;
+          htescape $job->feedback_sync_path,
+          htescape timestamp $job->feedback_synced_time,
+          htescape Dumper $job->as_dumpable;
       $app->send_html ($html);
       $app->throw;
     } elsif ($path->[1] eq 'sync') {
@@ -600,16 +633,21 @@ sub process ($$) {
     } elsif ($path->[2] eq 'approve') {
       $app->requires_no_csrf;
       $app->requires_request_method ({POST => 1});
+      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
       my $ws = $app->mygengo_webservice;
       my $res = $ws->job_approve
           ($path->[1],
-           comment_for_translator => $app->text_param ('comment'));
+           comment_for_translator => $app->text_param ('comment'),
+           comment_for_mygengo => $app->text_param ('comment-for-mygengo'),
+           comment_is_public => $app->text_param ('comment-is-public'));
       $app->throw_mygengo_error ($res) if $res->is_error;
       sync_jobs_from_res $ws->job_get ($path->[1]);
+      $class->sync_job_feedback ($app, $ws, $job_row);
       $app->throw_redirect (q</job/> . $path->[1]);
     } elsif ($path->[2] eq 'reject') {
       $app->requires_no_csrf;
       $app->requires_request_method ({POST => 1});
+      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
       my $ws = $app->mygengo_webservice;
       my $res = $ws->job_reject
           ($path->[1],
@@ -643,6 +681,17 @@ sub process ($$) {
 
       $class->sync_job_comments ($app, $ws, $job_row);
       $app->throw_redirect (q</job/> . $path->[1] . q<#comments>);
+    }
+
+  } elsif (@$path == 4 and
+           $path->[0] eq 'job' and
+           $path->[1] =~ /\A[0-9]+\z/ and
+           $path->[2] eq 'feedback') {
+    if ($path->[3] eq 'sync') {
+      my $ws = $app->mygengo_webservice;
+      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
+      $class->sync_job_feedback ($app, $ws, $job_row);
+      $app->throw_redirect (q</job/> . $path->[1]);
     }
 
   } elsif (@$path == 1 and $path->[0] eq 'account') {
@@ -816,5 +865,20 @@ sub sync_job_comments ($$$$) {
     });
   }
 } # sync_job_comments
+
+sub sync_job_feedback ($$$$) {
+  my ($class, $app, $ws, $job_row) = @_;
+  
+  my $res = $ws->job_feedback ($job_row->get ('id'));
+  $app->throw_mygengo_error ($res) if $res->is_error;
+  
+  my $feedback = $res->data->{feedback};
+  if ($feedback and ref $feedback eq 'HASH') {
+    $job_row->update ({
+      feedback => $feedback,
+      feedback_updated => time,
+    });
+  }
+} # sync_job_feedback
 
 1;
