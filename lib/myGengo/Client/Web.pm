@@ -445,17 +445,18 @@ sub process ($$) {
             (api_key => $http->request_auth->{userid},
              private_key => $http->request_auth->{password});
 
+        my $source_lang = $app->bare_param ('source-lang');
+        my $target_lang = $app->bare_param ('target-lang');
+        my $tier = $app->bare_param ('tier');
+
         use Data::Dumper;
-        my $job = $ws->create_job_request
-            (source => {
-               lang => $app->bare_param ('source-lang'),
-               body => $app->text_param ('source-body'),
-             },
-             target => {
-               lang => $app->bare_param ('target-lang'),
-             },
-             tier => $app->bare_param ('tier'));
-        my $res = $ws->job_post ([$job]);
+        my $jobs = $app->text_param_list ('source-body')->map (sub {
+          $ws->create_job_request
+              (source => {lang => $source_lang, body => $_},
+               target => {lang => $target_lang},
+               tier => $tier);
+        });
+        my $res = $ws->job_post ($jobs);
         unless ($res->is_error) {
           sync_jobs_from_res $res;
           $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
@@ -477,43 +478,56 @@ sub process ($$) {
           <h1>Submit jobs</h1>
 
           <form action="/job/submit" method=POST>
+            <table class=job-submit-texts>
+              <thead>
+                <tr>
+                  <th colspan=2>Texts
+              <tbody>
+                <tr>
+                  <td><textarea name=source-body></textarea>
+                  <td><button type=button onclick="
+                    if (!confirm (this.getAttribute ('data-confirm'))) return;
+                    var tr = this.parentNode.parentNode;
+                    tr.parentNode.removeChild (tr);
+                  " data-confirm="Delete this item?">Delete</button>
+              <tfoot>
+                <tr>
+                  <td>
+                  <td><button type=button onclick="
+                    var table = this.parentNode.parentNode.parentNode.parentNode;
+                    var tr = document.createElement ('tr');
+                    tr.innerHTML = table.getAttribute ('data-template');
+                    table.tBodies[0].appendChild (tr);
+                  ">Add</button>
+            </table>
+            <script>
+              var tables = document.querySelectorAll ('table');
+              var table = tables[tables.length - 1];
+              var trHTML = table.getElementsByTagName ('tr')[1].innerHTML;
+              table.setAttribute ('data-template', trHTML);
+            </script>
 
-            <section>
-              <table>
-                <tbody>
-                  <tr>
-                    <th rowspan=2>Source
-                    <th>Language
-                    <td>
-                      <select name=source-lang>%s</select>
-                  <tr>
-                    <th>Text
-                    <td>
-                      <textarea name=source-body></textarea>
-                <tbody>
-                  <tr>
-                    <th>Target
-                    <th>Language
-                    <td>
-                      <select name=target-lang>%s</select>
-                <tbody>
-                  <tr>
-                    <th colspan=2>Quality level
-                    <td>
-                      <select name=tier>
-                        <option value=machine>Machine
-                        <option value=standard>Standard
-                        <option value=pro>Pro
-                        <option value=ultra>Ultra
-                      </select>
-                <tfoot>
-                  <tr>
-                    <td colspan=3>
-                      <button type=submit>
-                        Submit
-                      </button>
-              </table>
-            </section>
+            <table>
+              <tbody>
+                <tr>
+                  <th>Source language
+                  <td><select name=source-lang>%s</select>
+                <tr>
+                  <th>Target language
+                  <td><select name=target-lang>%s</select>
+                <tr>
+                  <th>Quality level
+                  <td>
+                    <select name=tier>
+                      <option value=machine>Machine
+                      <option value=standard>Standard
+                      <option value=pro>Pro
+                      <option value=ultra>Ultra
+                    </select>
+              <tfoot>
+                <tr>
+                  <td colspan=2><button type=submit>Submit</button>
+            </table>
 
           </form>
         }, header_html, lang_options_html, lang_options_html;
@@ -672,15 +686,25 @@ sub process ($$) {
           width: 100%;
         }
 
-        textarea {
-          height: 5em;
+        tfoot td {
+          text-align: center;
+          padding: 0.5em;
         }
 
-        tfoot td {
+        .job-submit-texts td + td {
           text-align: center;
         }
 
         menu li {
+          padding: 0.3em;
+        }
+
+        textarea {
+          height: 5em;
+        }
+
+        button {
+          min-width: 5em;
           padding: 0.3em;
         }
 
