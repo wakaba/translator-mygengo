@@ -324,7 +324,13 @@ sub process ($$) {
                   ? '<p><strong>For myGengo</strong>: ' .
                     (htescape $comment2) .
                     ($event->comment_is_public ? ' (Public)' : '')
-                  : '')),
+                  : '')) .
+            ($event->reason
+                 ? '<p><strong>Reason</strong>: ' .
+                   htescape $event->reason : '') .
+            ($event->follow_up
+                 ? '<p><strong>Follow up</strong>: ' .
+                   htescape $event->follow_up : ''),
             (htescape timestamp $event->timestamp) .
             ($event->client_record_id ? ' / #' . $event->client_record_id : '');
       })->join ('');
@@ -674,13 +680,24 @@ sub process ($$) {
       $app->requires_request_method ({POST => 1});
       my $job_row = $app->requires_mygengo_job_row ($path->[1]);
       my $ws = $app->mygengo_webservice;
+
+      my %param = (reason => $app->bare_param ('reason'),
+                   follow_up => $app->text_param ('follow-up'),
+                   comment_for_translator => $app->text_param ('comment'));
       my $res = $ws->job_reject
           ($path->[1],
-           reason => $app->bare_param ('reason'),
            captcha => $app->text_param ('captcha'),
-           follow_up => $app->text_param ('follow-up'),
-           comment_for_translator => $app->text_param ('comment'));
+           %param);
       $app->throw_mygengo_error ($res) if $res->is_error;
+
+      my $db = Dongry::Database->load ('mygengo');
+      $db->table ('job_rejection')->create ({
+        id => $db->bare_sql_fragment ('uuid_short()'),
+        job_id => $path->[1],
+        %param,
+        #author_id => ...,
+      });
+
       sync_jobs_from_res $ws->job_get ($path->[1]);
       $app->throw_redirect (q</job/> . $path->[1]);
     }

@@ -38,4 +38,12 @@ sub rating ($) {
   return undef;
 } # rating
 
+sub reason ($) {
+  return undef;
+} # reason
+
+sub follow_up ($) {
+  return undef;
+} # follow_up
+
 1;

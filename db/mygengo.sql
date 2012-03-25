@@ -57,7 +57,7 @@ CREATE TABLE job_rejection (
   job_id BIGINT UNSIGNED NOT NULL,
   comment_for_translator MEDIUMBLOB,
   reason VARCHAR(31) NOT NULL,
-  followup VARCHAR(31) NOT NULL,
+  follow_up VARCHAR(31) NOT NULL,
   created TIMESTAMP NOT NULL,
   author_id BIGINT UNSIGNED NOT NULL,
   PRIMARY KEY (id),

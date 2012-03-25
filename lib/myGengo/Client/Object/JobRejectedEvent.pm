@@ -1,4 +1,4 @@
-package myGengo::Client::Object::JobApprovedEvent;
+package myGengo::Client::Object::JobRejectedEvent;
 use strict;
 use warnings;
 use myGengo::Client::Object::JobEvent;
@@ -13,7 +13,7 @@ sub row ($) {
 } # row
 
 sub type ($) {
-  return 'job_approved';
+  return 'job_rejected';
 } # type
 
 sub client_record_id ($) {
@@ -30,7 +30,7 @@ sub author_type ($) {
 } # author_type
 
 sub label ($) {
-  return 'Approved the job';
+  return 'Rejected the job';
 } # label
 
 sub timestamp ($) {
@@ -41,16 +41,12 @@ sub comment_for_translator ($) {
   return $_[0]->row->get ('comment_for_translator');
 } # comment_for_translator
 
-sub comment_for_mygengo ($) {
-  return $_[0]->row->get ('comment_for_mygengo');
-} # comment_for_mygengo
+sub reason ($) {
+  return $_[0]->row->get ('reason');
+} # reason
 
-sub comment_is_public ($) {
-  return $_[0]->row->get ('comment_is_public');
-} # comment_is_public
-
-sub rating ($) {
-  return $_[0]->row->get ('rating');
-} # rating
+sub follow_up ($) {
+  return $_[0]->row->get ('follow_up');
+} # follow_up
 
 1;

@@ -4,6 +4,9 @@ use warnings;
 use Dongry::Database;
 use myGengo::Client::MySQL;
 use myGengo::Client::Object::Job;
+use myGengo::Client::Object::JobCreatedEvent;
+use myGengo::Client::Object::JobApprovedEvent;
+use myGengo::Client::Object::JobRejectedEvent;
 
 sub new_from_job_id ($$) {
   return bless {job_id => $_[1]}, $_[0];
@@ -34,18 +37,24 @@ sub event_list ($) {
   {
     my $created = $job->created or last;
     
-    require myGengo::Client::Object::JobCreatedEvent;
     $result->push
         (myGengo::Client::Object::JobCreatedEvent->new_from_time ($created));
   }
 
   {
-    my $row = $db->table ('job_approval')->find ({job_id => $job_id})
-        or last;
-    
-    require myGengo::Client::Object::JobApprovedEvent;
-    $result->push
-        (myGengo::Client::Object::JobApprovedEvent->new_from_row ($row));
+    $result->append
+        ($db->table ('job_approval')->find_all ({job_id => $job_id})
+             ->map (sub {
+                 myGengo::Client::Object::JobApprovedEvent->new_from_row ($_);
+             }));
+  }
+
+  {
+    $result->append
+        ($db->table ('job_rejection')->find_all ({job_id => $job_id})
+             ->map (sub {
+                 myGengo::Client::Object::JobRejectedEvent->new_from_row ($_);
+             }));
   }
 
   {

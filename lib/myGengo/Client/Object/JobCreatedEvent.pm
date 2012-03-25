@@ -17,7 +17,7 @@ sub author_type ($) {
 } # author_type
 
 sub label ($) {
-  return 'Created a job';
+  return 'Created the job';
 } # label
 
 sub timestamp ($) {
