@@ -74,6 +74,23 @@ sub data ($) {
   return $_[0]->{data} ||= $_[0]->row->get ('data');
 } # data
 
+sub synced_time ($) {
+  return $_[0]->row->get ('data_updated');
+} # synced_time
+
+sub comments ($) {
+  require List::Ish;
+  require myGengo::Client::Object::Comment;
+  return $_[0]->{comments}
+      ||= List::Ish->new ([map {
+            myGengo::Client::Object::Comment->new_from_hashref ($_)
+          } @{$_[0]->row->get ('comments') || []}]);
+} # comments
+
+sub comments_synced_time ($) {
+  return $_[0]->row->get ('comments_updated');
+} # comments_synced_time
+
 sub path ($) {
   my $self = shift;
   return "/job/" . $self->job_id;
@@ -93,6 +110,21 @@ sub reject_path ($) {
   my $self = shift;
   return '/job/' . $self->job_id . '/reject';
 } # reject_path
+
+sub sync_path ($) {
+  my $self = shift;
+  return '/job/' . $self->job_id . '/sync';
+} # sync_path
+
+sub comment_post_path ($) {
+  my $self = shift;
+  return '/job/' . $self->job_id . '/comment/submit';
+} # comment_post_path
+
+sub comments_sync_path ($) {
+  my $self = shift;
+  return '/job/' . $self->job_id . '/comment/sync';
+} # comments_sync_path
 
 sub as_jsonable ($) {
   my $self = shift;

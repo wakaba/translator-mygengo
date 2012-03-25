@@ -64,5 +64,15 @@ sub throw_mygengo_error ($$) {
   $self->throw;
 } # throw_mygengo_error
 
+sub requires_mygengo_job_row ($$) {
+  my ($self, $job_id) = @_;
+  require myGengo::Client::MySQL;
+  require Dongry::Database;
+  my $db = Dongry::Database->load ('mygengo');
+  my $job = $db->table ('job')->find ({id => $job_id});
+  $self->throw_error (404, reason_phrase => 'Job not found') unless $job;
+  return $job;
+} # requires_mygengo_job_row
+
 1;
 

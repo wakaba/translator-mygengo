@@ -52,6 +52,10 @@ sub lang ($) {
   }->{$_[0]} || $_[0];
 } # lang
 
+sub author_type ($) {
+  return ucfirst $_[0];
+} # author_type
+
 sub boolean ($) {
   return $_[0] ? 'Yes' : 'No';
 } # boolean
@@ -122,13 +126,14 @@ sub sync_jobs_from_res ($) {
       job_created => $job->{ctime},
       status => $job->{status},
       data => {%$job},
+      data_updated => time,
       updated => time,
     }], duplicate => 'replace');
   }
 } # sync_jobs_from_res
 
 sub process ($$) {
-  my $app = $_[1];
+  my ($class, $app) = @_;
   my $http = $app->http;
   
   my $path = $app->path_segments;
@@ -141,6 +146,7 @@ sub process ($$) {
       my $status = $app->bare_param ('status');
       my $source_lang = $app->bare_param ('source-lang');
       my $target_lang = $app->bare_param ('target-lang');
+      my $sort_key = $app->bare_param ('sort') || '';
 
       my $db = Dongry::Database->load ('mygengo');
       my $jobs = $db->query
@@ -153,7 +159,11 @@ sub process ($$) {
                ($target_lang ? (target_lang => $target_lang) : ()),
              },
            ],
-           order => [updated => 'desc', job_created => 'desc'],
+           order => [
+             ($sort_key eq 'comments' ? (comments_updated => 'desc') : ()),
+             updated => 'desc',
+             job_created => 'desc',
+           ],
            item_list_filter => sub {
              return $_[1]->map (sub {
                return myGengo::Client::Object::Job->new_from_row ($_);
@@ -181,7 +191,7 @@ sub process ($$) {
               <td>%s
           },
               htescape timestamp $_->updated,
-              htescape $_->path,
+              htescape $_->path . ($sort_key eq 'comments' ? '#comments' : ''),
               $_->job_id,
               htescape lang $_->source_lang,
               htescape $_->source_lang, htescape $_->source_body,
@@ -238,6 +248,9 @@ sub process ($$) {
                   <tr>
                     <th>Target language
                     <td><select name=target-lang>%s</select>
+                  <tr>
+                    <th>Sort by
+                    <td><select name=sort>%s</select>
                 <tfoot>
                   <tr>
                     <td colspan=2><button type=submit>Show</button>
@@ -261,7 +274,11 @@ sub process ($$) {
         }, header_html, $job_trs,
             status_options_html (with_any => 1, current_value => $status),
             lang_options_html (with_any => 1, current_value => $source_lang),
-            lang_options_html (with_any => 1, current_value => $target_lang);
+            lang_options_html (with_any => 1, current_value => $target_lang),
+            options_html (current_value => $sort_key, avail_options => [
+              [job => 'Any update'],
+              [comments => 'Comments'],
+            ]);
         $app->send_html ($html);
       }
       $app->throw;
@@ -281,6 +298,21 @@ sub process ($$) {
         $target_html = sprintf q{<img src="%s">},
             $job->preview_path;
       }
+
+      my $comments_html = join '', $job->comments->map (sub {
+        my $comment = $_;
+        return sprintf q{
+          <article>
+            <p>%s
+            <footer>
+              <p>%s / %s
+            </footer>
+          </article>
+        },
+            htescape $comment->body,
+            htescape author_type $comment->author_type,
+            htescape timestamp $comment->created;
+      })->join ('');
       
       my $html = sprintf q{ 
         <!DOCTYPE HTML>
@@ -393,6 +425,37 @@ sub process ($$) {
           </menu>
         </section>
 
+        <section id=comments>
+          <h2>Comments</h2>
+
+          %s
+
+          <article>
+            <form action="%s" method=post>
+              <table>
+                <tbody>
+                  <tr>
+                    <th>Author
+                    <td>Customer
+                  <tr>
+                    <th>Text
+                    <td><textarea name=comment></textarea>
+                <tfoot>
+                  <tr>
+                    <td colspan=2>
+                      <button type=submit>Post</button>
+              </table>
+            </form>
+          </article>
+
+          <menu>
+            <li><form action="%s" method=post>
+              <button type=submit>Sync comments</button>
+              (Last synced: %s)
+            </form>
+          </menu>
+        </section>
+
         <section>
           <h2>Job data dump</h2>
           <pre>%s</pre>
@@ -416,6 +479,10 @@ sub process ($$) {
           htescape $job->approve_path,
           htescape $job->reject_path,
           htescape $job->captcha_image_url,
+          $comments_html,
+          htescape $job->comment_post_path,
+          htescape $job->comments_sync_path,
+          htescape timestamp $job->comments_synced_time,
           htescape Dumper $job->data;
       $app->send_html ($html);
       $app->throw;
@@ -518,6 +585,7 @@ sub process ($$) {
         $app->throw;
       }
     }
+
   } elsif (@$path == 3 and
            $path->[0] eq 'job' and
            $path->[1] =~ /\A[0-9]+\z/) {
@@ -552,6 +620,29 @@ sub process ($$) {
       $app->throw_mygengo_error ($res) if $res->is_error;
       sync_jobs_from_res $ws->job_get ($path->[1]);
       $app->throw_redirect (q</job/> . $path->[1]);
+    }
+
+  } elsif (@$path == 4 and
+           $path->[0] eq 'job' and
+           $path->[1] =~ /\A[0-9]+\z/ and
+           $path->[2] eq 'comment') {
+    if ($path->[3] eq 'sync') {
+      my $ws = $app->mygengo_webservice;
+      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
+      $class->sync_job_comments ($app, $ws, $job_row);
+      $app->throw_redirect (q</job/> . $path->[1]);
+    } elsif ($path->[3] eq 'submit') {
+      $app->requires_request_method ({POST => 1});
+      my $ws = $app->mygengo_webservice;
+      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
+
+      my $res = $ws->job_comment_post
+          ($path->[1],
+           comment_for_translator => $app->text_param ('comment'));
+      $app->throw_mygengo_error ($res) if $res->is_error;
+
+      $class->sync_job_comments ($app, $ws, $job_row);
+      $app->throw_redirect (q</job/> . $path->[1] . q<#comments>);
     }
 
   } elsif (@$path == 1 and $path->[0] eq 'account') {
@@ -710,5 +801,20 @@ sub process ($$) {
   }
   $app->throw_error (404);
 } # process
+
+sub sync_job_comments ($$$$) {
+  my ($class, $app, $ws, $job_row) = @_;
+  
+  my $res = $ws->job_comments ($job_row->get ('id'));
+  $app->throw_mygengo_error ($res) if $res->is_error;
+  
+  my $comments = $res->data->{thread};
+  if ($comments and ref $comments eq 'ARRAY' and @$comments) {
+    $job_row->update ({
+      comments => $comments,
+      comments_updated => time,
+    });
+  }
+} # sync_job_comments
 
 1;
