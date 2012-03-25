@@ -22,25 +22,29 @@ carton-install carton-update local-submodules: %: Makefile-setupenv
 
 ## ------ Tests ------
 
+PERL_ENV = PATH=$(PERL_PATH):$(PATH) PERL5LIB=$(shell cat config/perl/libs.txt)
+
 test: safetest
 
-safetest: testdb-start safetest-main testdb-stop
+safetest: carton-install config/perl/libs.txt \
+    testdb-start safetest-main testdb-stop
 
 PREPARE_DB_SET = modules/perl-rdb-utils/bin/prepare-db-set.pl
 PREPARE_DB_SET_ = $(PERL) $(PREPARE_DB_SET)
 
 testdb-start:
 	mkdir -p config/mysql
-	$(PREPARE_DB_SET_) --preparation-file-name db/preparation.txt \
+	$(PERL_ENV) $(PREPARE_DB_SET_) \
+	    --preparation-file-name db/preparation.txt \
 	    --dsn-list config/mysql/dsns.json
 
-testdb-end:
-	$(PREPARE_DB_SET_) --stop \
+testdb-stop:
+	$(PERL_ENV) $(PREPARE_DB_SET_) \
+	    --stop \
 	    --dsn-list config/mysql/dsns.json
 
-safetest-main: carton-install config/perl/libs.txt
-	PATH=$(PERL_PATH):$(PATH) PERL5LIB=$(shell cat config/perl/libs.txt) \
-	    $(PROVE) t/*.t
+safetest-main: 
+	$(PERL_ENV) $(PROVE) t/*.t
 
 always:
 
