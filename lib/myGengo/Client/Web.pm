@@ -62,6 +62,7 @@ sub header_html () {
       <h1>myGengo Jobs</h1>
       <nav>
         <a href="/job/">Jobs</a>
+        <a href="/account">Account</a>
       </nav>
     </header>
   };
@@ -552,6 +553,44 @@ sub process ($$) {
       sync_jobs_from_res $ws->job_get ($path->[1]);
       $app->throw_redirect (q</job/> . $path->[1]);
     }
+
+  } elsif (@$path == 1 and $path->[0] eq 'account') {
+    my $ws = $app->mygengo_webservice;
+
+    my $stats = $ws->account_stats;
+    $app->throw_mygengo_error ($stats) if $stats->is_error;
+
+    my $balance = $ws->account_balance;
+    $app->throw_mygengo_error ($balance) if $balance->is_error;
+
+    my $html = sprintf q{
+      <!DOCTYPE HTML>
+      <html lang=en>
+      <title>Account information</title>
+      <link rel=stylesheet href="/css/mygengo-client">
+      %s
+      <h1>Account information</h1>
+
+      <table>
+        <tbody>
+          <tr>
+            <th>Registered
+            <td>%s
+          <tr>
+            <th>Credits spent
+            <td>%s
+          <tr>
+            <th>Credits available
+            <td>%s
+      </table>
+    },
+        header_html,
+        htescape timestamp $stats->data->{user_since},
+        htescape price $stats->data->{credits_spent},
+        htescape price $balance->data->{credits};
+    $app->send_html ($html);
+    $app->throw;
+
   } elsif (@$path == 2 and $path->[0] eq 'css') {
     if ($path->[1] eq 'mygengo-client') {
       $http->set_response_header ('Content-Type' => 'text/css; charset=utf-8');
