@@ -67,13 +67,41 @@ sub header_html () {
   };
 } # header_html
 
-sub lang_options () {
-  join '', map {
-    sprintf '<option value="%s">%s',
-        htescape $_,
-        htescape lang $_,
-  } qw(ja en fr);
-} # lang_options
+sub options_html (;%) {
+  my %args = @_;
+  return (
+    $args{with_any}
+        ? '<option value="">Any'
+        : ''
+  ) . join '', map {
+    sprintf '<option value="%s" %s>%s',
+        htescape $_->[0],
+        (defined $args{current_value} and $args{current_value} eq $_->[0]
+             ? 'selected' : ''),
+        htescape $_->[1],
+  } @{$args{avail_options}};
+} # options_html
+
+sub lang_options_html (;%) {
+  return options_html @_, avail_options => [
+    map { [$_, lang $_] } qw(ja en fr)
+  ];
+} # lang_options_html
+
+sub status ($) {
+  return {
+    available => 'Available',
+    approved => 'Approved',
+    held => 'Held',
+    reviewable => 'Reviewable',
+  }->{$_[0]} || $_[0];
+} # status
+
+sub status_options_html (;%) {
+  return options_html @_, avail_options => [
+    map { [$_, status $_] } qw(reviewable available approved held)
+  ];
+} # status_options_html
 
 sub sync_jobs_from_res ($) {
   my $res = shift;
@@ -109,12 +137,21 @@ sub process ($$) {
       require myGengo::Client::MySQL;
       require myGengo::Client::Object::Job;
 
+      my $status = $app->bare_param ('status');
+      my $source_lang = $app->bare_param ('source-lang');
+      my $target_lang = $app->bare_param ('target-lang');
+
       my $db = Dongry::Database->load ('mygengo');
       my $jobs = $db->query
           (table_name => 'job',
-           where => {
-               id => {-ne => undef},
-           },
+           where => [
+             ':status:optsub',
+             status => {
+               ($status ? (status => $status) : ()),
+               ($source_lang ? (source_lang => $source_lang) : ()),
+               ($target_lang ? (target_lang => $target_lang) : ()),
+             },
+           ],
            order => [updated => 'desc', job_created => 'desc'],
            item_list_filter => sub {
              return $_[1]->map (sub {
@@ -149,7 +186,7 @@ sub process ($$) {
               htescape $_->source_lang, htescape $_->source_body,
               htescape lang $_->target_lang,
               htescape $_->target_lang, $target_html,
-              htescape $_->status;
+              htescape status $_->status;
         } @$jobs;
 
         my $html = sprintf q{
@@ -159,6 +196,16 @@ sub process ($$) {
           <link rel=stylesheet href="/css/mygengo-client">
           %s
           <h1>Jobs</h1>
+
+          <nav>
+            <p>
+              <strong>Status</strong>:
+              <a href="/job/?status=reviewable">Reviewable</a>
+              <a href="/job/?status=approved">Approved</a>
+              <a href="/job/?status=available">Available</a>
+              <a href="/job/?status=held">Held</a>
+          </nav>
+
           <table>
             <thead>
               <tr>
@@ -177,6 +224,26 @@ sub process ($$) {
               %s
           </table>
 
+          <nav>
+            <form action="/job/" method=get>
+              <table>
+                <tbody>
+                  <tr>
+                    <th>Status
+                    <td><select name=status>%s</select>
+                  <tr>
+                    <th>Source language
+                    <td><select name=source-lang>%s</select>
+                  <tr>
+                    <th>Target language
+                    <td><select name=target-lang>%s</select>
+                <tfoot>
+                  <tr>
+                    <td colspan=2><button type=submit>Show</button>
+              </table>
+            </form>
+          </nav>
+
           <section>
             <h2>Actions</h2>
 
@@ -190,7 +257,10 @@ sub process ($$) {
                 </form>
             </menu>
           </section>
-        }, header_html, $job_trs;
+        }, header_html, $job_trs,
+            status_options_html (with_any => 1, current_value => $status),
+            lang_options_html (with_any => 1, current_value => $source_lang),
+            lang_options_html (with_any => 1, current_value => $target_lang);
         $app->send_html ($html);
       }
       $app->throw;
@@ -333,7 +403,7 @@ sub process ($$) {
           htescape lang $job->target_lang,
           htescape $job->target_lang, $target_html,
           htescape boolean $job->target_is_machine_translation,
-          htescape $job->status,
+          htescape status $job->status,
           htescape boolean $job->auto_approve,
           htescape timestamp $job->updated,
           htescape $job->tier,
@@ -446,7 +516,7 @@ sub process ($$) {
             </section>
 
           </form>
-        }, header_html, lang_options, lang_options;
+        }, header_html, lang_options_html, lang_options_html;
         $app->send_html ($html);
         $app->throw;
       }
@@ -559,21 +629,51 @@ sub process ($$) {
           margin: 1em;
         }
 
+        nav {
+          display: block;
+          text-align: right;
+          font-size: 90%;
+          padding: 0.3em;
+        }
+        nav p {
+          margin: 0;
+        }
+
         table {
           width: 100%;
+        }
+
+        nav table {
+          width: 40%;
+          margin-left: auto;
+          margin-right: 0;
         }
 
         th {
           background-color: #F9F9F9;
           color: black;
         }
+        th:first-child {
+          text-align: left;
+        }
+        thead th:first-child {
+          text-align: center;
+        }
+        tbody th {
+          text-align: left;
+        }
         th, td {
           padding: 0.2em;
         }
 
         td input:not([type]),
-        td textarea {
+        td textarea,
+        td select {
           width: 100%;
+        }
+
+        textarea {
+          height: 5em;
         }
 
         tfoot td {

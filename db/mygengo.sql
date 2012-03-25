@@ -14,5 +14,7 @@ CREATE TABLE job (
   KEY (job_created),
   KEY (updated),
   KEY (status, updated),
+  KEY (source_lang, updated),
+  KEY (target_lang, updated),
   KEY (approved)
 ) DEFAULT CHARSET=BINARY;
