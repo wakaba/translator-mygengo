@@ -24,3 +24,44 @@ CREATE TABLE job (
   KEY (target_lang, updated),
   KEY (approved)
 ) DEFAULT CHARSET=BINARY;
+
+CREATE TABLE customer_comment (
+  id BIGINT UNSIGNED NOT NULL,
+  job_id BIGINT UNSIGNED NOT NULL,
+  body MEDIUMBLOB NOT NULL,
+  created TIMESTAMP NOT NULL,
+  author_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (id),
+  KEY (job_id, created),
+  KEY (author_id, created),
+  KEY (created)
+) DEFAULT CHARSET=BINARY;
+
+CREATE TABLE job_approval (
+  id BIGINT UNSIGNED NOT NULL,
+  job_id BIGINT UNSIGNED NOT NULL,
+  comment_for_translator MEDIUMBLOB,
+  comment_for_mygengo MEDIUMBLOB,
+  comment_is_public BOOL NOT NULl,
+  rating DECIMAL(5,2) NOT NULL,
+  created TIMESTAMP NOT NULL,
+  author_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (id),
+  KEY (job_id, created),
+  KEY (author_id, created),
+  KEY (created)
+) DEFAULT CHARSET=BINARY;
+
+CREATE TABLE job_rejection (
+  id BIGINT UNSIGNED NOT NULL,
+  job_id BIGINT UNSIGNED NOT NULL,
+  comment_for_translator MEDIUMBLOB,
+  reason VARCHAR(31) NOT NULL,
+  followup VARCHAR(31) NOT NULL,
+  created TIMESTAMP NOT NULL,
+  author_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (id),
+  KEY (job_id, created),
+  KEY (author_id, created),
+  KEY (created)
+) DEFAULT CHARSET=BINARY;

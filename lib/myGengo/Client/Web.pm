@@ -289,7 +289,7 @@ sub process ($$) {
 
       my $db = Dongry::Database->load ('mygengo');
       my $row = $db->table ('job')->find ({id => $path->[1]});
-      $app->throw_code (404) unless $row;
+      $app->throw_error (404) unless $row;
       my $job = myGengo::Client::Object::Job->new_from_row ($row);
 
       my $target_html = htescape $job->target_body;
@@ -299,20 +299,64 @@ sub process ($$) {
             $job->preview_path;
       }
 
-      my $comments_html = join '', $job->comments->map (sub {
+      my $comments = $job->comments;
+      my $cc_rows = $db->table ('customer_comment')->find_all
+          ({job_id => $path->[1]});
+      my $cc_rows_by_time = {map { $_->get ('created') => $_ } @$cc_rows};
+
+      my $comments_html = join '', $comments->map (sub {
         my $comment = $_;
-        return sprintf q{
-          <article>
-            <p>%s
-            <footer>
-              <p>%s / %s
-            </footer>
-          </article>
-        },
-            htescape $comment->body,
-            htescape author_type $comment->author_type,
-            htescape timestamp $comment->created;
+        my $cc_row = $comment->author_type eq 'customer'
+            ? $cc_rows_by_time->{$comment->created} : undef;
+        $cc_row = undef if $cc_row and $cc_row->get ('body') ne $comment->body;
+        if ($cc_row) {
+          delete $cc_rows_by_time->{$comment->created};
+          return sprintf q{
+            <article>
+              <p>%s
+              <footer>
+                <p>%s (%s) / %s / #%s
+              </footer>
+            </article>
+          },
+              htescape $comment->body,
+              htescape $cc_row->get ('author_id'),
+              htescape author_type $comment->author_type,
+              htescape timestamp $comment->created,
+              htescape $cc_row->get ('id');
+        } else {
+          return sprintf q{
+            <article>
+              <p>%s
+              <footer>
+                <p>%s / %s
+              </footer>
+            </article>
+          },
+              htescape $comment->body,
+              htescape author_type $comment->author_type,
+              htescape timestamp $comment->created;
+        }
       })->join ('');
+      if (keys %$cc_rows_by_time) {
+        for (sort { $a cmp $b } keys %$cc_rows_by_time) {
+          my $cc_row = $cc_rows_by_time->{$_};
+          $comments_html .= sprintf q{
+            <article>
+              <p class=warning><strong>Not found at myGengo server!</strong>
+              <p>%s
+              <footer>
+                <p>%s (%s) / %s / #%s
+              </footer>
+            </article>
+          },
+              htescape $cc_row->get ('body'),
+              htescape $cc_row->get ('author_id'),
+              htescape author_type 'customer',
+              htescape timestamp $cc_row->get ('created'),
+              htescape $cc_row->get ('id');
+        }
+      }
 
       my $feedback_html = '';
       if ($job->has_feedback) {
@@ -668,16 +712,25 @@ sub process ($$) {
       my $ws = $app->mygengo_webservice;
       my $job_row = $app->requires_mygengo_job_row ($path->[1]);
       $class->sync_job_comments ($app, $ws, $job_row);
-      $app->throw_redirect (q</job/> . $path->[1]);
+      $app->throw_redirect (q</job/> . $path->[1] . q<#comments>);
+
     } elsif ($path->[3] eq 'submit') {
       $app->requires_request_method ({POST => 1});
       my $ws = $app->mygengo_webservice;
       my $job_row = $app->requires_mygengo_job_row ($path->[1]);
 
+      my $comment_body = $app->text_param ('comment');
       my $res = $ws->job_comment_post
-          ($path->[1],
-           comment_for_translator => $app->text_param ('comment'));
+          ($path->[1], comment_for_translator => $comment_body);
       $app->throw_mygengo_error ($res) if $res->is_error;
+
+      my $db = Dongry::Database->load ('mygengo');
+      $db->table ('customer_comment')->create ({
+        id => $db->bare_sql_fragment ('uuid_short()'),
+        job_id => $path->[1],
+        body => $comment_body,
+        #author_id => ...,
+      });
 
       $class->sync_job_comments ($app, $ws, $job_row);
       $app->throw_redirect (q</job/> . $path->[1] . q<#comments>);
@@ -691,7 +744,7 @@ sub process ($$) {
       my $ws = $app->mygengo_webservice;
       my $job_row = $app->requires_mygengo_job_row ($path->[1]);
       $class->sync_job_feedback ($app, $ws, $job_row);
-      $app->throw_redirect (q</job/> . $path->[1]);
+      $app->throw_redirect (q</job/> . $path->[1] . q<#comments>);
     }
 
   } elsif (@$path == 1 and $path->[0] eq 'account') {

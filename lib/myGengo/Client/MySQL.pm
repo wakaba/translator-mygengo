@@ -33,9 +33,44 @@ $Dongry::Database::Registry->{mygengo} = {
       default => {
         updated => sub { time },
       },
-    },
+    }, # job
+    customer_comment => {
+      primary_keys => ['id'],
+      type => {
+        body => 'text',
+        created => 'timestamp',
+      },
+      default => {
+        created => sub { time },
+      },
+    }, # customer_comment
+    job_approval => {
+      primary_keys => ['id'],
+      type => {
+        comment_for_translator => 'text',
+        comment_for_mygengo => 'text',
+        created => 'timestamp',
+      },
+      default => {
+        created => sub { time },
+      },
+    }, # job_approval
+    job_rejection => {
+      primary_keys => ['id'],
+      type => {
+        comment_for_translator => 'text',
+        created => 'timestamp',
+      },
+      default => {
+        created => sub { time },
+      },
+    }, # job_rejection
   },
-};
+  onconnect => sub {
+    my ($self, %args) = @_;
+    $self->set_tz ('+00:00', source_name => $args{source_name});
+  },
+}; # mygengo
 
 use Path::Class;
 use JSON::Functions::XS qw(file2perl);
