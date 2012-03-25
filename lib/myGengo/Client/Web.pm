@@ -170,18 +170,15 @@ sub process ($$) {
              });
            })->find_all (offset => 0, limit => 100);
 
-      if ($path->[1] eq 'index.json') {
-        $app->send_json ($jobs->map (sub { $_->as_jsonable }));
-      } else {
-        my $job_trs = join '', map {
-          my $target_html = htescape $_->target_body;
-          if ($target_html eq '' and 
-              $_->target_has_preview) {
-            $target_html = sprintf q{<img src="%s">},
-                $_->preview_path;
-          }
+      my $job_trs = join '', map {
+        my $target_html = htescape $_->target_body;
+        if ($target_html eq '' and 
+            $_->target_has_preview) {
+          $target_html = sprintf q{<img src="%s">},
+              $_->preview_path;
+        }
 
-          sprintf q{
+        sprintf q{
             <tr>
               <th title="Updated: %s"><a href="%s">%d</a>
               <td>%s
@@ -189,7 +186,7 @@ sub process ($$) {
               <td>%s
               <td lang="%s">%s
               <td>%s
-          },
+        },
               htescape timestamp $_->updated,
               htescape $_->path . ($sort_key eq 'comments' ? '#comments' : ''),
               $_->job_id,
@@ -198,9 +195,9 @@ sub process ($$) {
               htescape lang $_->target_lang,
               htescape $_->target_lang, $target_html,
               htescape status $_->status;
-        } @$jobs;
+      } @$jobs;
 
-        my $html = sprintf q{
+      my $html = sprintf q{
           <!DOCTYPE HTML>
           <html lang=en>
           <title>Jobs</title>
@@ -279,18 +276,14 @@ sub process ($$) {
               [job => 'Any update'],
               [comments => 'Comments'],
             ]);
-        $app->send_html ($html);
-      }
+      $app->send_html ($html);
       $app->throw;
     } elsif ($path->[1] =~ /\A[0-9]+\z/) {
-      require Dongry::Database;
-      require myGengo::Client::MySQL;
-      require myGengo::Client::Object::Job;
-
-      my $db = Dongry::Database->load ('mygengo');
-      my $row = $db->table ('job')->find ({id => $path->[1]});
-      $app->throw_error (404) unless $row;
-      my $job = myGengo::Client::Object::Job->new_from_row ($row);
+      require myGengo::Client::Service::JobEventList;
+      my $service = myGengo::Client::Service::JobEventList->new_from_job_id
+          ($path->[1]);
+      my $job = $service->job
+          or $app->throw_error (404, reason_phrase => 'Job not found');
 
       my $target_html = htescape $job->target_body;
       if ($target_html eq '' and 
@@ -299,79 +292,53 @@ sub process ($$) {
             $job->preview_path;
       }
 
-      my $comments = $job->comments;
-      my $cc_rows = $db->table ('customer_comment')->find_all
-          ({job_id => $path->[1]});
-      my $cc_rows_by_time = {map { $_->get ('created') => $_ } @$cc_rows};
-
-      my $comments_html = join '', $comments->map (sub {
-        my $comment = $_;
-        my $cc_row = $comment->author_type eq 'customer'
-            ? $cc_rows_by_time->{$comment->created} : undef;
-        $cc_row = undef if $cc_row and $cc_row->get ('body') ne $comment->body;
-        if ($cc_row) {
-          delete $cc_rows_by_time->{$comment->created};
-          return sprintf q{
-            <article>
-              <p>%s
-              <footer>
-                <p>%s (%s) / %s / #%s
-              </footer>
-            </article>
-          },
-              htescape $comment->body,
-              htescape $cc_row->get ('author_id'),
-              htescape author_type $comment->author_type,
-              htescape timestamp $comment->created,
-              htescape $cc_row->get ('id');
-        } else {
-          return sprintf q{
-            <article>
-              <p>%s
-              <footer>
-                <p>%s / %s
-              </footer>
-            </article>
-          },
-              htescape $comment->body,
-              htescape author_type $comment->author_type,
-              htescape timestamp $comment->created;
-        }
+      my $events_html = join '', $service->event_list->map (sub {
+        my $event = $_;
+        my $comment1 = $event->comment_for_translator;
+        my $comment2 = $event->comment_for_mygengo;
+        return sprintf q{
+          <article>
+            <header>
+              %s
+            </header>
+            %s
+            <footer>
+              %s
+            </footer>
+          </article>
+        },
+            ('<p>' . htescape ($event->author_id
+                                   ? $event->author_id .
+                                     ' (' .
+                                     (author_type $event->author_type) .
+                                     ')'
+                                   : author_type $event->author_type)) .
+            ($event->not_found_at_server
+                 ? '<p class=warning><strong>Not found at myGengo server!</strong>' : ''),
+            (('<p>' . htescape $event->label) . 
+             (defined $comment1 and length $comment1
+                  ? '<p><strong>For translator</strong>: ' .
+                    htescape $comment1
+                  : '') .
+             (defined $comment2 and length $comment2
+                  ? '<p><strong>For myGengo</strong>: ' .
+                    (htescape $comment2) .
+                    ($event->comment_is_public ? ' (Public)' : '')
+                  : '')),
+            (htescape timestamp $event->timestamp) .
+            ($event->client_record_id ? ' / #' . $event->client_record_id : '');
       })->join ('');
-      if (keys %$cc_rows_by_time) {
-        for (sort { $a cmp $b } keys %$cc_rows_by_time) {
-          my $cc_row = $cc_rows_by_time->{$_};
-          $comments_html .= sprintf q{
-            <article>
-              <p class=warning><strong>Not found at myGengo server!</strong>
-              <p>%s
-              <footer>
-                <p>%s (%s) / %s / #%s
-              </footer>
-            </article>
-          },
-              htescape $cc_row->get ('body'),
-              htescape $cc_row->get ('author_id'),
-              htescape author_type 'customer',
-              htescape timestamp $cc_row->get ('created'),
-              htescape $cc_row->get ('id');
-        }
-      }
 
       my $feedback_html = '';
       if ($job->has_feedback) {
         $feedback_html = sprintf q{
-          <article>
-            <h3>Feedback</h3>
-            <p>%s (%s)
-            <footer>
-              <p>%s
-            </footer>
-          </article>
+          <section>
+            <h2>Feedback</h2>
+            <p><strong>For translator</strong>: %s (%s)
+          </section>
         },
             htescape $job->feedback_comment_for_translator,
-            htescape $job->feedback_rating,
-            htescape author_type 'customer';
+            htescape $job->feedback_rating;
       }
 
       my $html = sprintf q{ 
@@ -427,6 +394,8 @@ sub process ($$) {
               <td>%s
         </table>
 
+        %s
+
         <section>
           <h2>Actions</h2>
 
@@ -436,6 +405,10 @@ sub process ($$) {
                 <table>
                   <tbody>
                     <tr>
+                      <th>Rating
+                      <td><input type=range name=rating
+                              value=3.0 min=0.0 max=5.0>
+                    <tr>
                       <th>Comment for translator
                       <td><textarea name=comment></textarea>
                     <tr>
@@ -443,7 +416,7 @@ sub process ($$) {
                       <td>
                         <textarea name=comment-for-mygengo></textarea>
                         <p><label>
-                          <input type=checkbox name=comment-is-public>
+                          <input type=checkbox name=comment-is-public value=1>
                           Public
                         </label>
                   <tfoot>
@@ -490,13 +463,15 @@ sub process ($$) {
                         </button>
                 </table>
              </form>
+            <li><form action="%s" method=post>
+              <button type=submit>Sync feedback</button>
+              (Last synced: %s)
+            </form>
           </menu>
         </section>
 
         <section id=comments>
-          <h2>Comments</h2>
-
-          %s
+          <h2>Events</h2>
 
           %s
 
@@ -523,10 +498,6 @@ sub process ($$) {
               <button type=submit>Sync comments</button>
               (Last synced: %s)
             </form>
-            <li><form action="%s" method=post>
-              <button type=submit>Sync feedback</button>
-              (Last synced: %s)
-            </form>
           </menu>
         </section>
 
@@ -550,16 +521,16 @@ sub process ($$) {
           htescape $job->tier,
           htescape price $job->credits,
           htescape time_amount $job->eta,
+          $feedback_html,
           htescape $job->approve_path,
           htescape $job->reject_path,
           htescape $job->captcha_image_url,
-          $comments_html,
-          $feedback_html,
+          htescape $job->feedback_sync_path,
+          htescape timestamp $job->feedback_synced_time,
+          $events_html,
           htescape $job->comment_post_path,
           htescape $job->comments_sync_path,
           htescape timestamp $job->comments_synced_time,
-          htescape $job->feedback_sync_path,
-          htescape timestamp $job->feedback_synced_time,
           htescape Dumper $job->as_dumpable;
       $app->send_html ($html);
       $app->throw;
@@ -679,15 +650,25 @@ sub process ($$) {
       $app->requires_request_method ({POST => 1});
       my $job_row = $app->requires_mygengo_job_row ($path->[1]);
       my $ws = $app->mygengo_webservice;
-      my $res = $ws->job_approve
-          ($path->[1],
-           comment_for_translator => $app->text_param ('comment'),
-           comment_for_mygengo => $app->text_param ('comment-for-mygengo'),
-           comment_is_public => $app->text_param ('comment-is-public'));
+      my %param = (comment_for_translator => $app->text_param ('comment'),
+                   comment_for_mygengo => $app->text_param ('comment-for-mygengo'),
+                   comment_is_public => $app->text_param ('comment-is-public'),
+                   rating => $app->text_param ('rating'));
+      my $res = $ws->job_approve ($path->[1], %param);
       $app->throw_mygengo_error ($res) if $res->is_error;
+
+      my $db = Dongry::Database->load ('mygengo');
+      $db->table ('job_approval')->create ({
+        id => $db->bare_sql_fragment ('uuid_short()'),
+        job_id => $path->[1],
+        %param,
+        #author_id => ...,
+      });
+
       sync_jobs_from_res $ws->job_get ($path->[1]);
       $class->sync_job_feedback ($app, $ws, $job_row);
       $app->throw_redirect (q</job/> . $path->[1]);
+
     } elsif ($path->[2] eq 'reject') {
       $app->requires_no_csrf;
       $app->requires_request_method ({POST => 1});
@@ -709,6 +690,7 @@ sub process ($$) {
            $path->[1] =~ /\A[0-9]+\z/ and
            $path->[2] eq 'comment') {
     if ($path->[3] eq 'sync') {
+      $app->requires_request_method ({POST => 1});
       my $ws = $app->mygengo_webservice;
       my $job_row = $app->requires_mygengo_job_row ($path->[1]);
       $class->sync_job_comments ($app, $ws, $job_row);

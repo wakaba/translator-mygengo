@@ -46,6 +46,10 @@ sub auto_approve ($) {
   return $_[0]->data->{auto_approve};
 } # auto_approve
 
+sub created ($) {
+  return $_[0]->row->get ('job_created');
+} # created
+
 sub updated ($) {
   return $_[0]->row->get ('updated');
 } # updated
