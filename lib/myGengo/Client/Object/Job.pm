@@ -125,15 +125,10 @@ sub preview_path ($) {
   return "/job/" . $self->job_id . '/preview';
 } # preview_path
 
-sub approve_path ($) {
+sub action_path ($) {
   my $self = shift;
-  return '/job/' . $self->job_id . '/approve';
+  return '/job/' . $self->job_id;
 } # approve_path
-
-sub reject_path ($) {
-  my $self = shift;
-  return '/job/' . $self->job_id . '/reject';
-} # reject_path
 
 sub sync_path ($) {
   my $self = shift;

@@ -278,12 +278,61 @@ sub process ($$) {
             ]);
       $app->send_html ($html);
       $app->throw;
+
     } elsif ($path->[1] =~ /\A[0-9]+\z/) {
-      require myGengo::Client::Service::JobEventList;
-      my $service = myGengo::Client::Service::JobEventList->new_from_job_id
-          ($path->[1]);
-      my $job = $service->job
-          or $app->throw_error (404, reason_phrase => 'Job not found');
+      if ($http->request_method eq 'POST') {
+        $app->requires_no_csrf;
+        my $job_row = $app->requires_mygengo_job_row ($path->[1]);
+        my $ws = $app->mygengo_webservice;
+
+        my $action = $app->bare_param ('action') || '';
+        if ($action eq 'approve') {
+          my %param = (comment_for_translator => $app->text_param ('comment'),
+                       comment_for_mygengo => $app->text_param ('comment-for-mygengo'),
+                       comment_is_public => $app->text_param ('comment-is-public'),
+                       rating => $app->text_param ('rating'));
+          my $res = $ws->job_approve ($path->[1], %param);
+          $app->throw_mygengo_error ($res) if $res->is_error;
+
+          my $db = Dongry::Database->load ('mygengo');
+          $db->table ('job_approval')->create ({
+            id => $db->bare_sql_fragment ('uuid_short()'),
+            job_id => $path->[1],
+            %param,
+            #author_id => ...,
+          });
+
+          sync_jobs_from_res $ws->job_get ($path->[1]);
+          $class->sync_job_feedback ($app, $ws, $job_row);
+          $app->throw_redirect (q</job/> . $path->[1]);
+        } elsif ($action eq 'reject') {
+          my %param = (reason => $app->bare_param ('reason'),
+                       follow_up => $app->text_param ('follow-up'),
+                       comment_for_translator => $app->text_param ('comment'));
+          my $res = $ws->job_reject
+              ($path->[1],
+               captcha => $app->text_param ('captcha'),
+               %param);
+          $app->throw_mygengo_error ($res) if $res->is_error;
+
+          my $db = Dongry::Database->load ('mygengo');
+          $db->table ('job_rejection')->create ({
+            id => $db->bare_sql_fragment ('uuid_short()'),
+            job_id => $path->[1],
+            %param,
+            #author_id => ...,
+          });
+          
+          sync_jobs_from_res $ws->job_get ($path->[1]);
+          $app->throw_redirect (q</job/> . $path->[1]);
+        } # action
+
+      } else {
+        require myGengo::Client::Service::JobEventList;
+        my $service = myGengo::Client::Service::JobEventList->new_from_job_id
+            ($path->[1]);
+        my $job = $service->job
+            or $app->throw_error (404, reason_phrase => 'Job not found');
 
       my $target_html = htescape $job->target_body;
       if ($target_html eq '' and 
@@ -408,6 +457,7 @@ sub process ($$) {
           <menu>
             <li>Approve:
               <form action="%s" method=POST>
+                <input type=hidden name=action value=approve>
                 <table>
                   <tbody>
                     <tr>
@@ -435,6 +485,7 @@ sub process ($$) {
               </form>
             <li>Reject:
               <form action="%s" method=POST>
+                <input type=hidden name=action value=reject>
                 <table>
                   <tbody>
                     <tr>
@@ -528,8 +579,8 @@ sub process ($$) {
           htescape price $job->credits,
           htescape time_amount $job->eta,
           $feedback_html,
-          htescape $job->approve_path,
-          htescape $job->reject_path,
+          htescape $job->action_path,
+          htescape $job->action_path,
           htescape $job->captcha_image_url,
           htescape $job->feedback_sync_path,
           htescape timestamp $job->feedback_synced_time,
@@ -538,8 +589,10 @@ sub process ($$) {
           htescape $job->comments_sync_path,
           htescape timestamp $job->comments_synced_time,
           htescape Dumper $job->as_dumpable;
-      $app->send_html ($html);
-      $app->throw;
+        $app->send_html ($html);
+        $app->throw;
+      } # request_method
+
     } elsif ($path->[1] eq 'sync') {
       $app->requires_request_method ({POST => 1});
       my $ws = $app->mygengo_webservice;
@@ -651,55 +704,6 @@ sub process ($$) {
       #$http->set_response_header ('Content-Type' => 'image/jpeg');
       #$http->send_response_body_as_ref (\($res->image_as_bytes));
       #$app->throw;
-    } elsif ($path->[2] eq 'approve') {
-      $app->requires_no_csrf;
-      $app->requires_request_method ({POST => 1});
-      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
-      my $ws = $app->mygengo_webservice;
-      my %param = (comment_for_translator => $app->text_param ('comment'),
-                   comment_for_mygengo => $app->text_param ('comment-for-mygengo'),
-                   comment_is_public => $app->text_param ('comment-is-public'),
-                   rating => $app->text_param ('rating'));
-      my $res = $ws->job_approve ($path->[1], %param);
-      $app->throw_mygengo_error ($res) if $res->is_error;
-
-      my $db = Dongry::Database->load ('mygengo');
-      $db->table ('job_approval')->create ({
-        id => $db->bare_sql_fragment ('uuid_short()'),
-        job_id => $path->[1],
-        %param,
-        #author_id => ...,
-      });
-
-      sync_jobs_from_res $ws->job_get ($path->[1]);
-      $class->sync_job_feedback ($app, $ws, $job_row);
-      $app->throw_redirect (q</job/> . $path->[1]);
-
-    } elsif ($path->[2] eq 'reject') {
-      $app->requires_no_csrf;
-      $app->requires_request_method ({POST => 1});
-      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
-      my $ws = $app->mygengo_webservice;
-
-      my %param = (reason => $app->bare_param ('reason'),
-                   follow_up => $app->text_param ('follow-up'),
-                   comment_for_translator => $app->text_param ('comment'));
-      my $res = $ws->job_reject
-          ($path->[1],
-           captcha => $app->text_param ('captcha'),
-           %param);
-      $app->throw_mygengo_error ($res) if $res->is_error;
-
-      my $db = Dongry::Database->load ('mygengo');
-      $db->table ('job_rejection')->create ({
-        id => $db->bare_sql_fragment ('uuid_short()'),
-        job_id => $path->[1],
-        %param,
-        #author_id => ...,
-      });
-
-      sync_jobs_from_res $ws->job_get ($path->[1]);
-      $app->throw_redirect (q</job/> . $path->[1]);
     }
 
   } elsif (@$path == 4 and
