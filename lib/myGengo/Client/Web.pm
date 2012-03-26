@@ -99,6 +99,7 @@ sub status ($) {
     approved => 'Approved',
     held => 'Held',
     reviewable => 'Reviewable',
+    cancelled => 'Cancelled',
   }->{$_[0]} || $_[0];
 } # status
 
@@ -266,6 +267,15 @@ sub process ($$) {
                     Sync recent jobs
                   </button>
                 </form>
+              <li><form method=POST>
+                <label>Job
+                #<input type=number value="" onchange="
+                  this.form.action = '/job/' + this.value + '/sync';
+                " oninput="
+                  this.form.action = '/job/' + this.value + '/sync';
+                " required></label>
+                <button type=submit>Sync</button>
+              </form>
             </menu>
           </section>
         }, header_html, $job_trs,
@@ -323,6 +333,19 @@ sub process ($$) {
             #author_id => ...,
           });
           
+          sync_jobs_from_res $ws->job_get ($path->[1]);
+          $app->throw_redirect (q</job/> . $path->[1]);
+        } elsif ($action eq 'cancel') {
+          my $res = $ws->job_delete ($path->[1]);
+          $app->throw_mygengo_error ($res) if $res->is_error;
+
+          my $db = Dongry::Database->load ('mygengo');
+          $db->table ('job_cancellation')->create ({
+            id => $db->bare_sql_fragment ('uuid_short()'),
+            job_id => $path->[1],
+            #author_id => ...,
+          });
+
           sync_jobs_from_res $ws->job_get ($path->[1]);
           $app->throw_redirect (q</job/> . $path->[1]);
         } # action
@@ -478,7 +501,7 @@ sub process ($$) {
                   <tfoot>
                     <tr>
                       <td colspan=2>
-                        <button type=submit>
+                        <button type=submit %s>
                           Approve
                         </button>
                 </table>
@@ -505,24 +528,29 @@ sub process ($$) {
                         </select>
                     <tr>
                       <th>Comment
-                      <td><textarea name=comment></textarea>
+                      <td><textarea name=comment required></textarea>
                     <tr>
                       <th><img src="%s" onload="
                         this.removeAttribute ('alt');
                       " alt="CAPTCHA image error">
                       <td><input name=captcha autocomplete=off
-                          placeholder="Input the shown text">
+                          placeholder="Input the shown text" required>
                   <tfoot>
                     <tr>
                       <td colspan=2>
-                        <button type=submit>
+                        <button type=submit %s>
                           Reject
                         </button>
                 </table>
              </form>
+
             <li><form action="%s" method=post>
-              <button type=submit>Sync feedback</button>
-              (Last synced: %s)
+              <input type=hidden name=action value=cancel>
+              <button type=submit %s>Cancel</button>
+            </form>
+
+            <li><form action="%s" method=post>
+              <button type=submit>Sync the job</button>
             </form>
           </menu>
         </section>
@@ -541,7 +569,7 @@ sub process ($$) {
                     <td>Customer
                   <tr>
                     <th>Text
-                    <td><textarea name=comment></textarea>
+                    <td><textarea name=comment required></textarea>
                 <tfoot>
                   <tr>
                     <td colspan=2>
@@ -549,13 +577,6 @@ sub process ($$) {
               </table>
             </form>
           </article>
-
-          <menu>
-            <li><form action="%s" method=post>
-              <button type=submit>Sync comments</button>
-              (Last synced: %s)
-            </form>
-          </menu>
         </section>
 
         <section>
@@ -580,14 +601,15 @@ sub process ($$) {
           htescape time_amount $job->eta,
           $feedback_html,
           htescape $job->action_path,
+          $job->is_approvable ? '' : 'disabled',
           htescape $job->action_path,
           htescape $job->captcha_image_url,
-          htescape $job->feedback_sync_path,
-          htescape timestamp $job->feedback_synced_time,
+          $job->is_rejectable ? '' : 'disabled',
+          htescape $job->action_path,
+          $job->is_cancellable ? '' : 'disabled',
+          htescape $job->sync_path,
           $events_html,
           htescape $job->comment_post_path,
-          htescape $job->comments_sync_path,
-          htescape timestamp $job->comments_synced_time,
           htescape Dumper $job->as_dumpable;
         $app->send_html ($html);
         $app->throw;
@@ -641,7 +663,7 @@ sub process ($$) {
                   <th colspan=2>Texts
               <tbody>
                 <tr>
-                  <td><textarea name=source-body></textarea>
+                  <td><textarea name=source-body required></textarea>
                   <td><button type=button onclick="
                     if (!confirm (this.getAttribute ('data-confirm'))) return;
                     var tr = this.parentNode.parentNode;
@@ -704,20 +726,27 @@ sub process ($$) {
       #$http->set_response_header ('Content-Type' => 'image/jpeg');
       #$http->send_response_body_as_ref (\($res->image_as_bytes));
       #$app->throw;
+    } elsif ($path->[2] eq 'sync') {
+      $app->requires_request_method ({POST => 1});
+
+      my $ws = $app->mygengo_webservice;
+      my $res = $ws->job_get ($path->[1]);
+      $app->throw_mygengo_error ($res) if $res->is_error;
+
+      sync_jobs_from_res $res;
+      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
+
+      $class->sync_job_comments ($app, $ws, $job_row);
+      $class->sync_job_feedback ($app, $ws, $job_row);
+
+      $app->throw_redirect (q</job/> . $path->[1]);
     }
 
   } elsif (@$path == 4 and
            $path->[0] eq 'job' and
            $path->[1] =~ /\A[0-9]+\z/ and
            $path->[2] eq 'comment') {
-    if ($path->[3] eq 'sync') {
-      $app->requires_request_method ({POST => 1});
-      my $ws = $app->mygengo_webservice;
-      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
-      $class->sync_job_comments ($app, $ws, $job_row);
-      $app->throw_redirect (q</job/> . $path->[1] . q<#comments>);
-
-    } elsif ($path->[3] eq 'submit') {
+    if ($path->[3] eq 'submit') {
       $app->requires_request_method ({POST => 1});
       my $ws = $app->mygengo_webservice;
       my $job_row = $app->requires_mygengo_job_row ($path->[1]);
@@ -736,17 +765,6 @@ sub process ($$) {
       });
 
       $class->sync_job_comments ($app, $ws, $job_row);
-      $app->throw_redirect (q</job/> . $path->[1] . q<#comments>);
-    }
-
-  } elsif (@$path == 4 and
-           $path->[0] eq 'job' and
-           $path->[1] =~ /\A[0-9]+\z/ and
-           $path->[2] eq 'feedback') {
-    if ($path->[3] eq 'sync') {
-      my $ws = $app->mygengo_webservice;
-      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
-      $class->sync_job_feedback ($app, $ws, $job_row);
       $app->throw_redirect (q</job/> . $path->[1] . q<#comments>);
     }
 

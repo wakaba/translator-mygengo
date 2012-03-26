@@ -42,6 +42,18 @@ sub status ($) {
   return $_[0]->row->get ('status');
 } # status
 
+sub is_approvable ($) {
+  return $_[0]->status eq 'reviewable';
+} # is_approvable
+
+sub is_rejectable ($) {
+  return $_[0]->status eq 'reviewable';
+} # is_rejectable
+
+sub is_cancellable ($) {
+  return $_[0]->status eq 'available';
+} # is_cancellable
+
 sub auto_approve ($) {
   return $_[0]->data->{auto_approve};
 } # auto_approve
@@ -139,16 +151,6 @@ sub comment_post_path ($) {
   my $self = shift;
   return '/job/' . $self->job_id . '/comment/submit';
 } # comment_post_path
-
-sub comments_sync_path ($) {
-  my $self = shift;
-  return '/job/' . $self->job_id . '/comment/sync';
-} # comments_sync_path
-
-sub feedback_sync_path ($) {
-  my $self = shift;
-  return '/job/' . $self->job_id . '/feedback/sync';
-} # feedback_sync_path
 
 sub as_dumpable ($) {
   my $self = shift;

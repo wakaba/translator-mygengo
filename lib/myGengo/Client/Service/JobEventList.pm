@@ -7,6 +7,7 @@ use myGengo::Client::Object::Job;
 use myGengo::Client::Object::JobCreatedEvent;
 use myGengo::Client::Object::JobApprovedEvent;
 use myGengo::Client::Object::JobRejectedEvent;
+use myGengo::Client::Object::JobCancelledEvent;
 
 sub new_from_job_id ($$) {
   return bless {job_id => $_[1]}, $_[0];
@@ -54,6 +55,14 @@ sub event_list ($) {
         ($db->table ('job_rejection')->find_all ({job_id => $job_id})
              ->map (sub {
                  myGengo::Client::Object::JobRejectedEvent->new_from_row ($_);
+             }));
+  }
+
+  {
+    $result->append
+        ($db->table ('job_cancellation')->find_all ({job_id => $job_id})
+             ->map (sub {
+                 myGengo::Client::Object::JobCancelledEvent->new_from_row ($_);
              }));
   }
 

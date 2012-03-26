@@ -65,3 +65,14 @@ CREATE TABLE job_rejection (
   KEY (author_id, created),
   KEY (created)
 ) DEFAULT CHARSET=BINARY;
+
+CREATE TABLE job_cancellation (
+  id BIGINT UNSIGNED NOT NULL,
+  job_id BIGINT UNSIGNED NOT NULL,
+  created TIMESTAMP NOT NULL,
+  author_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (id),
+  KEY (job_id, created),
+  KEY (author_id, created),
+  KEY (created)
+) DEFAULT CHARSET=BINARY;

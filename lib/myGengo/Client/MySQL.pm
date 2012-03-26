@@ -65,6 +65,15 @@ $Dongry::Database::Registry->{mygengo} = {
         created => sub { time },
       },
     }, # job_rejection
+    job_cancellation => {
+      primary_keys => ['id'],
+      type => {
+        created => 'timestamp',
+      },
+      default => {
+        created => sub { time },
+      },
+    }, # job_cancellation
   },
   onconnect => sub {
     my ($self, %args) = @_;
