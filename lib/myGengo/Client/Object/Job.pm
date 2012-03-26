@@ -107,6 +107,21 @@ sub comments_synced_time ($) {
   return $_[0]->row->get ('comments_updated');
 } # comments_synced_time
 
+sub revisions ($) {
+  require List::Ish;
+  require myGengo::Client::Object::Revision;
+  my $revs = $_[0]->row->get ('revisions') || {};
+  return $_[0]->{revisions}
+      ||= List::Ish->new ([map {
+            my $v = $revs->{rev}->{$_} || {};
+            myGengo::Client::Object::Revision->new_from_hashref ($v);
+          } @{$revs->{ids} or []}]);
+} # revisions
+
+sub revisions_synced_time ($) {
+  return $_[0]->row->get ('revisions_updated');
+} # revisions_synced_time
+
 sub feedback ($) {
   return $_[0]->{feedback} ||= $_[0]->row->get ('feedback') || {};
 } # feedback
@@ -160,17 +175,8 @@ sub as_dumpable ($) {
     data => $row->get ('data'),
     comments => $row->get ('comments'),
     feedback => $row->get ('feedback'),
+    revisions => $row->get ('revisions'),
   };
 } # as_dumpable
-
-sub as_jsonable ($) {
-  my $self = shift;
-  my $row = $self->row;
-  return {
-    id => $self->job_id,
-    data => $row->get ('data'),
-    updated => $self->updated,
-  };
-} # as_jsonable
 
 1;

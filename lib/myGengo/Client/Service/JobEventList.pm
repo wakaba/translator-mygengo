@@ -66,6 +66,8 @@ sub event_list ($) {
              }));
   }
 
+  $result->append ($job->revisions);
+
   {
     my $comments = $job->comments;
     my $cc_rows = $db->table ('customer_comment')->find_all

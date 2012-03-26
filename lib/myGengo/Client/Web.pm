@@ -314,6 +314,8 @@ sub process ($$) {
 
           sync_jobs_from_res $ws->job_get ($path->[1]);
           $class->sync_job_feedback ($app, $ws, $job_row);
+          $class->sync_job_revisions ($app, $ws, $job_row);
+
           $app->throw_redirect (q</job/> . $path->[1]);
         } elsif ($action eq 'reject') {
           my %param = (reason => $app->bare_param ('reason'),
@@ -738,6 +740,7 @@ sub process ($$) {
 
       $class->sync_job_comments ($app, $ws, $job_row);
       $class->sync_job_feedback ($app, $ws, $job_row);
+      $class->sync_job_revisions ($app, $ws, $job_row);
 
       $app->throw_redirect (q</job/> . $path->[1]);
     }
@@ -954,5 +957,35 @@ sub sync_job_feedback ($$$$) {
     });
   }
 } # sync_job_feedback
+
+sub sync_job_revisions ($$$$) {
+  my ($class, $app, $ws, $job_row) = @_;
+  
+  my $job_id = $job_row->get ('id');
+  my $res = $ws->job_revision_list ($job_id);
+  $app->throw_mygengo_error ($res) if $res->is_error;
+
+  my $revs = $res->data->{revisions};
+  if ($revs and ref $revs eq 'ARRAY') {
+    my $value = $job_row->get ('revisions') || {};
+    $value->{ids} = [map { $_->{rev_id} } @$revs];
+    
+    for (@{$value->{ids}}) {
+      unless ($value->{rev}->{$_}) {
+        my $res = $ws->job_revision ($job_id, $_);
+        if (not $res->is_error and
+            $res->data and ref $res->data eq 'HASH' and
+            $res->data->{revision} and ref $res->data->{revision} eq 'HASH') {
+          $value->{rev}->{$_} = $res->data->{revision};
+        }
+      }
+    }
+    
+    $job_row->update ({
+      revisions => $value,
+      revisions_updated => time,
+    });
+  }
+} # sync_job_revisions
 
 1;
