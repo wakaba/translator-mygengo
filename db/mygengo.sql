@@ -2,6 +2,7 @@
 CREATE TABLE job (
   id BIGINT UNSIGNED NOT NULL,
   job_group_id BIGINT UNSIGNED NOT NULL,
+  callback_key BIGINT UNSIGNED NOT NULL,
   source_lang VARCHAR(6) NOT NULL,
   target_lang VARCHAR(6) NOT NULL,
   source_body BLOB NOT NULL,

@@ -78,7 +78,7 @@ sub event_list ($) {
       my $comment = $_;
       my $cc_row = $comment->author_type eq 'customer'
           ? $cc_rows_by_time->{$comment->timestamp} : undef;
-      $cc_row = undef if $cc_row and $cc_row->get ('body') ne $comment->body;
+      $cc_row = undef if $cc_row and $cc_row->get ('body') ne $comment->comment_for_translator;
       if ($cc_row) {
         delete $cc_rows_by_time->{$comment->timestamp};
         $comment->set_row ($cc_row);

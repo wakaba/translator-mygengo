@@ -109,8 +109,8 @@ sub status_options_html (;%) {
   ];
 } # status_options_html
 
-sub sync_jobs_from_res ($) {
-  my $res = shift;
+sub sync_jobs_from_res ($;%) {
+  my ($res, %args) = @_;
   return if $res->is_error;
   
   require myGengo::Client::MySQL;
@@ -123,6 +123,7 @@ sub sync_jobs_from_res ($) {
     $db->table ('job')->insert ([{
       id => $job->{job_id},
       job_group_id => $job_group_id,
+      callback_key => $args{callback_key} || 0,
       source_lang => $job->{source}->{lang} // '',
       source_body => $job->{source}->{body} // '',
       target_lang => $job->{target}->{lang} // '',
@@ -655,16 +656,21 @@ sub process ($$) {
         my $target_lang = $app->bare_param ('target-lang');
         my $tier = $app->bare_param ('tier');
 
+        my $callback_url = $http->url->resolve_string ('/job/callback')->stringify; # XXX host
+        my $callback_key = Dongry::Database->load ('mygengo')
+            ->execute ('select uuid_short () as uuid')->first->{uuid};
         my $jobs = $app->text_param_list ('source-body')->map (sub {
           $ws->create_job_request
               (source => {lang => $source_lang, body => $_},
                target => {lang => $target_lang},
-               tier => $tier);
+               tier => $tier,
+               callback_url => $callback_url,
+               custom_data => $callback_key);
         });
         my $res = $ws->job_post
-            ($jobs, as_group => $app->bare_param ('as-group'));
+            ($jobs, as_group => (@$jobs > 1 && $app->bare_param ('as-group')));
         $app->throw_mygengo_error ($res) if $res->is_error;
-        sync_jobs_from_res $res; # XXX author_id => ...
+        sync_jobs_from_res $res, callback_key => $callback_key; # XXX author_id => ...
         $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
       } else {
         my $html = sprintf q{
@@ -737,6 +743,31 @@ sub process ($$) {
         $app->send_html ($html);
         $app->throw;
       }
+    } elsif ($path->[1] eq 'callback') {
+      #warn Dumper $http->request_body_params;
+
+      require WebService::myGengo::Lite;
+      my $ws = WebService::myGengo::Lite->new;
+      my $res = $ws->receive_callback
+          (job => $app->bare_param ('job'),
+           comment => $app->bare_param ('comment'));
+      my $obj = $res->data->{job} || $res->data->{comment} || {};
+      my $job_id = $obj->{job_id} or $app->throw_error (404);
+      my $job_row = $app->requires_mygengo_job_row ($job_id)
+          or $app->throw_error (404);
+
+      my $key_from_db = $job_row->get ('callback_key');
+      if (not $obj->{custom_data} or
+          not $key_from_db or
+          $obj->{custom_data} ne $key_from_db) {
+        $app->throw_error (403);
+      }
+
+      warn $job_id;
+      # XXX
+
+      $app->send_plain_text ('Thanks!');
+      $app->throw;
     }
 
   } elsif (@$path == 3 and
