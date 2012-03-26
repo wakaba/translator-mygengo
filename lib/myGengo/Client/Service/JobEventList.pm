@@ -21,7 +21,7 @@ sub job ($) {
   my $self = shift;
   return $self->{job} ||= do {
     my $row = $self->db->table ('job')->find ({id => $self->{job_id}});
-    myGengo::Client::Object::Job->new_from_row ($row);
+    $row ? myGengo::Client::Object::Job->new_from_row ($row) : undef;
   };
 } # job
 

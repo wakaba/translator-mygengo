@@ -116,10 +116,13 @@ sub sync_jobs_from_res ($) {
   require myGengo::Client::MySQL;
   require Dongry::Database;
   my $db = Dongry::Database->load ('mygengo');
+
+  my $job_group_id = $res->data->{group_id} || 0;
   
   for my $job (@{$res->jobs || []}) {
     $db->table ('job')->insert ([{
       id => $job->{job_id},
+      job_group_id => $job_group_id,
       source_lang => $job->{source}->{lang} // '',
       source_body => $job->{source}->{body} // '',
       target_lang => $job->{target}->{lang} // '',
@@ -147,6 +150,7 @@ sub process ($$) {
       my $status = $app->bare_param ('status');
       my $source_lang = $app->bare_param ('source-lang');
       my $target_lang = $app->bare_param ('target-lang');
+      my $group_id = $app->bare_param ('group-id');
       my $sort_key = $app->bare_param ('sort') || '';
 
       my $db = Dongry::Database->load ('mygengo');
@@ -158,6 +162,7 @@ sub process ($$) {
                ($status ? (status => $status) : ()),
                ($source_lang ? (source_lang => $source_lang) : ()),
                ($target_lang ? (target_lang => $target_lang) : ()),
+               ($group_id ? (job_group_id => $group_id) : ()),
              },
            ],
            order => [
@@ -247,6 +252,9 @@ sub process ($$) {
                     <th>Target language
                     <td><select name=target-lang>%s</select>
                   <tr>
+                    <th>Job group <abbr title=ID>#</abbr>
+                    <td><input type=number name=group-id value="%s">
+                  <tr>
                     <th>Sort by
                     <td><select name=sort>%s</select>
                 <tfoot>
@@ -282,6 +290,7 @@ sub process ($$) {
             status_options_html (with_any => 1, current_value => $status),
             lang_options_html (with_any => 1, current_value => $source_lang),
             lang_options_html (with_any => 1, current_value => $target_lang),
+            htescape $group_id || '',
             options_html (current_value => $sort_key, avail_options => [
               [job => 'Any update'],
               [comments => 'Comments'],
@@ -460,6 +469,9 @@ sub process ($$) {
               <th>Auto-approve
               <td>%s
             <tr>
+              <th colspan=2>Group
+              <td>%s
+            <tr>
               <th colspan=2>Updated
               <td>%s
           <tbody>
@@ -597,6 +609,10 @@ sub process ($$) {
           htescape boolean $job->target_is_machine_translation,
           htescape status $job->status,
           htescape boolean $job->auto_approve,
+          ($job->job_group_id
+               ? sprintf q{<a href="/job/?group-id=%d">#%d</a>},
+                     $job->job_group_id, $job->job_group_id,
+               : '(None)'),
           htescape timestamp $job->updated,
           htescape $job->tier,
           htescape price $job->credits,
@@ -645,9 +661,10 @@ sub process ($$) {
                target => {lang => $target_lang},
                tier => $tier);
         });
-        my $res = $ws->job_post ($jobs);
+        my $res = $ws->job_post
+            ($jobs, as_group => $app->bare_param ('as-group'));
         $app->throw_mygengo_error ($res) if $res->is_error;
-        sync_jobs_from_res $res;
+        sync_jobs_from_res $res; # XXX author_id => ...
         $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
       } else {
         my $html = sprintf q{
@@ -705,6 +722,11 @@ sub process ($$) {
                       <option value=pro>Pro
                       <option value=ultra>Ultra
                     </select>
+                <tr>
+                  <td colspan=2><label>
+                    <input type=checkbox name=as-group checked value=1>
+                    Submit as a group
+                  </label>
               <tfoot>
                 <tr>
                   <td colspan=2><button type=submit>Submit</button>
@@ -891,6 +913,7 @@ sub process ($$) {
         }
 
         td input:not([type]),
+        td input[type=number],
         td textarea,
         td select {
           width: 100%;

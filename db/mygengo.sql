@@ -1,6 +1,7 @@
 
 CREATE TABLE job (
   id BIGINT UNSIGNED NOT NULL,
+  job_group_id BIGINT UNSIGNED NOT NULL,
   source_lang VARCHAR(6) NOT NULL,
   target_lang VARCHAR(6) NOT NULL,
   source_body BLOB NOT NULL,
@@ -19,6 +20,7 @@ CREATE TABLE job (
   approved TIMESTAMP NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
   KEY (job_created),
+  KEY (job_group_id),
   KEY (comments_updated),
   KEY (updated),
   KEY (status, updated),

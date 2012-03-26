@@ -58,6 +58,10 @@ sub auto_approve ($) {
   return $_[0]->data->{auto_approve};
 } # auto_approve
 
+sub job_group_id ($) {
+  return $_[0]->row->get ('job_group_id');
+} # job_group_id
+
 sub created ($) {
   return $_[0]->row->get ('job_created');
 } # created
