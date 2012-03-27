@@ -60,16 +60,24 @@ sub boolean ($) {
   return $_[0] ? 'Yes' : 'No';
 } # boolean
 
-sub header_html () {
+sub header_html ($$) {
+  my ($class, $app) = @_;
   return sprintf q{
     <header>
       <h1>myGengo Jobs</h1>
       <nav>
         <a href="/job/">Jobs</a>
-        <a href="/account">Account</a>
+        <a href="/config">Config</a>
+        <a href="/account">Status</a>
       </nav>
     </header>
-  };
+
+    %s
+  }, $app->mygengo_use_sandbox ? q{
+    <div class=use-sandbox-warning>
+      myGengo sandbox mode
+    </div>
+  } : q{};
 } # header_html
 
 sub options_html (;%) {
@@ -142,8 +150,84 @@ sub process ($$) {
   my $http = $app->http;
   
   my $path = $app->path_segments;
+  if (@$path == 1 and $path->[0] eq 'config') {
+    if ($http->request_method eq 'POST') {
+      $app->requires_no_csrf;
+      my $row = $app->mygengo_client_config_row;
+      if ($row) {
+        $row->update ({
+          api_key => $app->bare_param ('api-key'),
+          private_key => $app->bare_param ('private-key'),
+          callback_url => $app->bare_param ('callback-url'),
+          use_sandbox => $app->bare_param ('use-sandbox'),
+          updated => time,
+        });
+      } else {
+        require myGengo::Client::MySQL;
+        require Dongry::Database;
+        Dongry::Database->load ('mygengo')->table ('config')->create ({
+          id => 1,
+          api_key => $app->bare_param ('api-key'),
+          private_key => $app->bare_param ('private-key'),
+          callback_url => $app->bare_param ('callback-url'),
+          use_sandbox => $app->bare_param ('use-sandbox'),
+          updated => time,
+        });
+      }
+      $app->throw_redirect ('/config');
+    } else {
+      my $row = $app->mygengo_client_config_row;
+      my $html = sprintf q{
+        <!DOCTYPE HTML> 
+        <html lang=en>
+        <title>Config</title>
+        <link rel=stylesheet href="/css/mygengo-client">
+        %s
+        <h1>Config</h1>
+
+        <form action=/config method=post>
+          <table>
+            <tbody>
+              <tr>
+                <th>API key
+                <td><input name=api-key value="%s">
+              <tr>
+                <th>Private key
+                <td><input name=private-key value="%s">
+              <tr>
+                <th>Callback URL
+                <td><input name=callback-url value="%s">
+              <tr>
+                <td colspan=2><label>
+                  <input type=checkbox name=use-sandbox value="1" %s>
+                  Use sandbox
+                </label>
+            <tfoot>
+              <tr>
+                <td colspan=2>
+                  <button type=submit>
+                    Save
+                  </button>
+          </table>
+        </form>
+      }, $class->header_html ($app),
+          htescape ($row ? $row->get ('api_key') : ''),
+          htescape ($row ? $row->get ('private_key') : ''),
+          htescape ($row ? $row->get ('callback_url')
+                         : $http->url->resolve_string (q</job/callback>)
+                               ->stringify),
+          $row ? $row->get ('use_sandbox') ? 'checked' : '' : 'checked';
+      $app->send_html ($html);
+      $app->throw;
+    }
+  } elsif (@$path > 1 and $path->[0] eq 'css') {
+    #
+  } else {
+    $app->requires_mygengo_client_config;
+  }
+
   if (@$path == 2 and $path->[0] eq 'job') {
-    if ($path->[1] eq '' or $path->[1] eq 'index.json') {
+    if ($path->[1] eq '') {
       require Dongry::Database;
       require myGengo::Client::MySQL;
       require myGengo::Client::Object::Job;
@@ -287,7 +371,7 @@ sub process ($$) {
               </form>
             </menu>
           </section>
-        }, header_html, $job_trs,
+        }, $class->header_html ($app), $job_trs,
             status_options_html (with_any => 1, current_value => $status),
             lang_options_html (with_any => 1, current_value => $source_lang),
             lang_options_html (with_any => 1, current_value => $target_lang),
@@ -600,7 +684,7 @@ sub process ($$) {
         </section>
       },
           $job->job_id,
-          header_html,
+          $class->header_html ($app),
           $job->job_id,
           htescape lang $job->source_lang,
           htescape $job->source_lang, htescape $job->source_body,
@@ -656,7 +740,7 @@ sub process ($$) {
         my $target_lang = $app->bare_param ('target-lang');
         my $tier = $app->bare_param ('tier');
 
-        my $callback_url = $http->url->resolve_string ('/job/callback')->stringify; # XXX host
+        my $callback_url = $app->mygengo_callback_url;
         my $callback_key = Dongry::Database->load ('mygengo')
             ->execute ('select uuid_short () as uuid')->first->{uuid};
         my $jobs = $app->text_param_list ('source-body')->map (sub {
@@ -739,7 +823,7 @@ sub process ($$) {
             </table>
 
           </form>
-        }, header_html, lang_options_html, lang_options_html;
+        }, $class->header_html ($app), lang_options_html, lang_options_html;
         $app->send_html ($html);
         $app->throw;
       }
@@ -854,7 +938,7 @@ sub process ($$) {
             <td>%s
       </table>
     },
-        header_html,
+        $class->header_html ($app),
         htescape timestamp $stats->data->{user_since},
         htescape price $stats->data->{credits_spent},
         htescape price $balance->data->{credits};
@@ -974,6 +1058,14 @@ sub process ($$) {
 
         pre {
           white-space: pre-wrap;
+        }
+
+        .use-sandbox-warning {
+          margin: 0.5em;
+          border: 0.3em solid red;
+          padding: 0.3em;
+          font-size: 160%;
+          text-align: center;
         }
       });
       $app->throw;

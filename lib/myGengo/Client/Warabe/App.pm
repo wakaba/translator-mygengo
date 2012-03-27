@@ -28,30 +28,43 @@ sub requires_no_csrf ($) {
       unless $origin eq $request_origin;
 } # requires_no_csrf
 
-sub requires_mygengo_keys_from_auth ($) {
+sub mygengo_client_config_row ($) {
+  return $_[0]->{mygengo_client_config_row} ||= do {
+    require myGengo::Client::MySQL;
+    require Dongry::Database;
+    
+    my $db = Dongry::Database->load ('mygengo');
+    $db->table ('config')->find ({id => 1}); # or undef
+  };
+} # mygengo_client_config_row
+
+sub requires_mygengo_client_config ($) {
   my $self = shift;
-  my $http = $self->http;
-  if (($http->request_auth->{auth_scheme} // '') ne 'basic') {
-    $http->set_status (401);
-    $http->set_response_auth
-        ('basic', realm => 'myGengo API key and private key');
-    $self->send_plain_text (401);
-    $self->throw;
-  }
-} # requires_mygengo_keys_from_auth
+  $self->throw_redirect (q</config>)
+      unless $self->mygengo_client_config_row;
+} # requires_mygengo_client_config
 
 sub mygengo_webservice ($) {
   my $self = shift;
   return $self->{mygengo_webservice} ||= do {
-    $self->requires_mygengo_keys_from_auth;
-    my $http = $self->http;
-    
+    my $config = $self->mygengo_client_config_row;
     require WebService::myGengo::Lite;
     WebService::myGengo::Lite->new
-        (api_key => $http->request_auth->{userid},
-         private_key => $http->request_auth->{password});
+        (api_key => $config->get ('api_key'),
+         private_key => $config->get ('private_key'),
+         is_production => !$config->get ('use_sandbox'));
   };
 } # mygengo_webservice
+
+sub mygengo_callback_url ($) {
+  my $self = shift;
+  return $self->mygengo_client_config_row->get ('callback_url');
+} # mygengo_callback_url
+
+sub mygengo_use_sandbox ($) {
+  my $self = shift;
+  return $self->mygengo_client_config_row->get ('use_sandbox');
+} # mygengo_use_sandbox
 
 sub throw_mygengo_error ($$) {
   my ($self, $res) = @_;

@@ -1,3 +1,14 @@
+CREATE TABLE config (
+  id BIGINT UNSIGNED NOT NULL,
+  api_key VARCHAR(255) NOT NULL,
+  private_key VARCHAR(255) NOT NULL,
+  callback_url VARCHAR(255) NOT NULL,
+  use_sandbox BOOL NOT NULL,
+  created TIMESTAMP NOT NULL,
+  updated TIMESTAMP NOT NULL,
+  PRIMARY KEY (id),
+  KEY (created)
+) DEFAULT CHARSET=BINARY;
 
 CREATE TABLE job (
   id BIGINT UNSIGNED NOT NULL,

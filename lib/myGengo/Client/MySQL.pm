@@ -15,6 +15,17 @@ $Dongry::Database::Registry->{mygengo} = {
     },
   },
   schema => {
+    config => {
+      primary_keys => ['id'],
+      type => {
+        created => 'timestamp',
+        updated => 'timestamp',
+      },
+      default => {
+        created => sub { time },
+        updated => sub { time },
+      },
+    },
     job => {
       primary_keys => ['id'],
       type => {
