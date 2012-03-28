@@ -15,7 +15,8 @@ CREATE TABLE job (
   feedback_updated TIMESTAMP NOT NULL DEFAULT 0,
   revisions MEDIUMBLOB NOT NULL,
   revisions_updated TIMESTAMP NOT NULL DEFAULT 0,
-  repo_data MEDIUMBLOB NOT NULL,
+  repo_msgid VARCHAR(255),
+  repo_data MEDIUMBLOB,
   job_created TIMESTAMP NOT NULL DEFAULT 0,
   updated TIMESTAMP NOT NULL DEFAULT 0,
   approved TIMESTAMP NOT NULL DEFAULT 0,
@@ -25,6 +26,7 @@ CREATE TABLE job (
   KEY (comments_updated),
   KEY (updated),
   KEY (status, updated),
+  KEY (repo_msgid, updated),
   KEY (source_lang, updated),
   KEY (target_lang, updated),
   KEY (approved)

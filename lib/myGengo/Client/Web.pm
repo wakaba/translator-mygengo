@@ -142,6 +142,7 @@ sub sync_jobs_from_res ($;%) {
       status => $job->{status},
       data => {%$job},
       data_updated => time,
+      repo_msgid => ($repo_data->{$job->{custom_data} || 0} || {})->{msgid},
       repo_data => ($repo_data->{$job->{custom_data} || 0} || {}),
       updated => time,
     }], duplicate => 'replace')->first_as_row;
@@ -165,6 +166,7 @@ sub process ($$) {
       my $target_lang = $app->bare_param ('target-lang');
       my $group_id = $app->bare_param ('group-id');
       my $sort_key = $app->bare_param ('sort') || '';
+      my $msgid = $app->bare_param ('msgid');
 
       my $db = Dongry::Database->load ('mygengo');
       my $jobs = $db->query
@@ -176,6 +178,7 @@ sub process ($$) {
                ($source_lang ? (source_lang => $source_lang) : ()),
                ($target_lang ? (target_lang => $target_lang) : ()),
                ($group_id ? (job_group_id => $group_id) : ()),
+               ($msgid ? (repo_msgid => {-infix => $msgid}) : ()),
              },
            ],
            order => [
@@ -268,6 +271,9 @@ sub process ($$) {
                     <th>Job group <abbr title=ID>#</abbr>
                     <td><input type=number name=group-id value="%s">
                   <tr>
+                    <th>Message ID
+                    <td><input name=msgid value="%s">
+                  <tr>
                     <th>Sort by
                     <td><select name=sort>%s</select>
                 <tfoot>
@@ -304,6 +310,7 @@ sub process ($$) {
             lang_options_html (with_any => 1, current_value => $source_lang),
             lang_options_html (with_any => 1, current_value => $target_lang),
             htescape $group_id || '',
+            htescape $msgid || '',
             options_html (current_value => $sort_key, avail_options => [
               [job => 'Any update'],
               [comments => 'Comments'],
