@@ -540,6 +540,16 @@ sub process ($$) {
                           <input type=checkbox name=comment-is-public value=1>
                           Public
                         </label>
+                  <tbody>
+                    <tr>
+                      <th>Message ID
+                      <td><input name=msgid value="%s">
+                    <tr>
+                      <th>Arguments
+                      <td><input name=msgargs value="%s">
+                    <tr>
+                      <th>Note
+                      <td><textarea name=comment-for-consumer>%s</textarea>
                   <tfoot>
                     <tr>
                       <td colspan=2>
@@ -650,8 +660,17 @@ sub process ($$) {
           htescape $job->repo_data->{comment_for_customer} // '',
 
           $feedback_html,
+
           htescape $job->action_path,
+          htescape $job->repo_data->{msgid},
+          htescape $job->repo_data->{msgargs},
+          htescape (join "\n\n",
+                        '[mygengo:job:' . $job->job_id . ']',
+                        ($job->job_group_id ?
+                             ('[mygengo:jobgroup:' . $job->job_group_id . ']'):
+                             ())),
           $job->is_approvable ? '' : 'disabled',
+
           htescape $job->action_path,
           htescape $job->captcha_image_url,
           $job->is_rejectable ? '' : 'disabled',
