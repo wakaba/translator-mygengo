@@ -654,7 +654,7 @@ sub process ($$) {
       sync_jobs_from_res $res;
       $app->throw_redirect ('/job/');
     } elsif ($path->[1] eq 'submit') {
-      if ($http->request_method eq 'POST') {
+      if ($http->request_method eq 'POST' and $app->bare_param ('send')) {
         $app->requires_no_csrf;
         $app->requires_request_method ({POST => 1});
         my $ws = $app->mygengo_webservice;
@@ -690,7 +690,9 @@ sub process ($$) {
           %s
           <h1>Submit jobs</h1>
 
-          <form action="/job/submit" method=POST>
+          <form action="/job/submit" method=POST onclick="
+            return confirm (this.getAttribute ('data-confirm'));
+          " data-confirm="Submit these jobs?">
             <table class=job-submit-texts>
               <thead>
                 <tr>
@@ -744,7 +746,8 @@ sub process ($$) {
                   </label>
               <tfoot>
                 <tr>
-                  <td colspan=2><button type=submit>Submit</button>
+                  <td colspan=2>
+                    <button type=submit name=send value=1>Submit</button>
             </table>
 
           </form>
