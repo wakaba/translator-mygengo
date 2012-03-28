@@ -39,6 +39,7 @@ $Dongry::Database::Registry->{mygengo} = {
         feedback_updated => 'timestamp',
         revisions => 'json',
         revisions_updated => 'timestamp',
+        repo_data => 'json',
         job_created => 'timestamp',
         updated => 'timestamp',
         approved => 'timestamp',

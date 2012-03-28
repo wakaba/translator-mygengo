@@ -2,6 +2,7 @@ package myGengo::Client::Web;
 use strict;
 use warnings;
 use Data::Dumper;
+use JSON::Functions::XS qw(json_bytes2perl);
 
 sub htescape ($) {
   my $s = $_[0];
@@ -126,8 +127,10 @@ sub sync_jobs_from_res ($;%) {
 
   my $job_group_id = $res->data->{group_id} || 0;
   
+  my $repo_data = $args{callback_key_to_repo_data} || {};
+  my @job_row;
   for my $job (@{$res->jobs || []}) {
-    $db->table ('job')->insert ([{
+    push @job_row, $db->table ('job')->insert ([{
       id => $job->{job_id},
       job_group_id => $job_group_id,
       callback_key => $job->{custom_data} || 0,
@@ -135,13 +138,15 @@ sub sync_jobs_from_res ($;%) {
       source_body => $job->{source}->{body} // '',
       target_lang => $job->{target}->{lang} // '',
       target_body => $job->{target}->{body} // '',
-      job_created => $job->{ctime},
+      job_created => $job->{ctime} || 0,
       status => $job->{status},
       data => {%$job},
       data_updated => time,
+      repo_data => ($repo_data->{$job->{custom_data} || 0} || {}),
       updated => time,
-    }], duplicate => 'replace');
+    }], duplicate => 'replace')->first_as_row;
   }
+  return \@job_row;
 } # sync_jobs_from_res
 
 sub process ($$) {
@@ -448,6 +453,10 @@ sub process ($$) {
         <table>
           <tbody>
             <tr>
+              <th colspan=2>Message ID
+              <td>%s %s
+          <tbody>
+            <tr>
               <th rowspan=3>Source
               <th>Language
               <td>%s
@@ -491,6 +500,10 @@ sub process ($$) {
               <td>%s
             <tr>
               <th colspan=2>Estimated time
+              <td>%s
+          <tbody>
+            <tr>
+              <th colspan=2>Note (private)
               <td>%s
         </table>
 
@@ -609,6 +622,8 @@ sub process ($$) {
           $job->job_id,
           $class->header_html ($app),
           $job->job_id,
+          htescape $job->repo_data->{msgid},
+          htescape $job->repo_data->{msgargs},
           htescape lang $job->source_lang,
           htescape $job->source_lang, htescape $job->source_body,
           htescape $job->unit_count,
@@ -625,6 +640,8 @@ sub process ($$) {
           htescape $job->tier,
           htescape price $job->credits,
           htescape time_amount $job->eta,
+          htescape $job->repo_data->{comment_for_customer} // '',
+
           $feedback_html,
           htescape $job->action_path,
           $job->is_approvable ? '' : 'disabled',
@@ -666,22 +683,110 @@ sub process ($$) {
         my $callback_url = $ws->callback_url;
         require myGengo::Client::MySQL;
         require Dongry::Database;
-        my $callback_key = Dongry::Database->load ('mygengo')
-            ->execute ('select uuid_short () as uuid')->first->{uuid};
-        my $jobs = $app->text_param_list ('source-body')->map (sub {
+        my $db = Dongry::Database->load ('mygengo');
+        my $bodies = $app->text_param_list ('source-body');
+        my $msgids = $app->text_param_list ('msgid');
+        my $msgargses = $app->text_param_list ('msgargs');
+        my $comment1s = $app->text_param_list ('comment-for-translator');
+        my $comment2s = $app->text_param_list ('comment-for-customer');
+        my $callback_keys = [];
+        push @$callback_keys, 
+            $db->execute ('select uuid_short () as uuid')->first->{uuid}
+                for 0..$#$bodies;
+        my $key_to_index = {map { $callback_keys->[$_] => $_ } 0..$#$bodies};
+        my $key_to_repo_data = {map {
+          my $i = $key_to_index->{$_};
+          ($_ => {
+            msgid => $msgids->[$i],
+            msgargs => $msgargses->[$i],
+            comment_for_customer => $comment2s->[$i],
+          });
+        } keys %$key_to_index};
+        my $jobs = [map {
           $ws->create_job_request
-              (source => {lang => $source_lang, body => $_},
+              (source => {lang => $source_lang, body => $bodies->[$_]},
                target => {lang => $target_lang},
                tier => $tier,
+               comment => $comment1s->[$_],
                callback_url => $callback_url,
-               custom_data => $callback_key);
-        });
+               custom_data => $callback_keys->[$_]);
+        } 0..$#$bodies];
         my $res = $ws->job_post
             ($jobs, as_group => (@$jobs > 1 && $app->bare_param ('as-group')));
         $app->throw_mygengo_error ($res) if $res->is_error;
-        sync_jobs_from_res $res; # XXX author_id => ...
+        my $job_rows = sync_jobs_from_res $res,
+            callback_key_to_repo_data => $key_to_repo_data; # XXX author_id => ...
+
+        $class->sync_job_comments ($app, $ws, $_) for @$job_rows;
+
         $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
       } else {
+        my $input_json = $app->bare_param ('from-repo');
+        if ($input_json) {
+          $input_json = json_bytes2perl $input_json;
+        }
+        $input_json ||= {};
+
+        my $source_lang = $input_json->{source_lang}
+            || $app->bare_param ('source-lang') || '';
+        my $target_lang = $input_json->{target_lang}
+            || $app->bare_param ('target-lang') || '';
+
+        my $items = $input_json->{items} || [];
+        $items = [map {
+          my $tags = {map { $_ => 1 } @{$_->{tags} || []}};
+          my $source = $_->{source_body} // '';
+          $source =~ s/(%[0-9]+)/[[[$1: variable]]]/g;
+          +{
+            msgid => $_->{msgid},
+            msgargs => $_->{msgargs},
+            source_body => $source,
+            comment_for_translator => (join "\n\n",
+                ($tags->{countable} ? 'Countable (plural / singular required)':
+                 $tags->{plural} ? 'Plural':
+                 $tags->{singular} ? 'Singular' : '')),
+            comment_for_customer => (join "\n\n",
+                ($_->{target_body} ? 'Current text: ' . $_->{target_body}
+                                   : ''),
+                (map { $_->{text} } grep { $_->{important} }
+                 @{$_->{comments} || []})),
+          };
+        } @$items];
+        unless (@$items) {
+          push @$items, {
+            msgid => '',
+            msgargs => '',
+            source_body => '',
+            comment_for_translator => '',
+            comment_for_customer => '',
+          };
+        }
+
+        my $items_html = join '', map {
+          sprintf q{
+            <tr>
+              <th colspan=3>
+                %s %s
+                <input type=hidden name=msgid value="%s">
+                <input type=hidden name=msgargs value="%s">
+                <button type=button onclick="
+                  if (!confirm (this.getAttribute ('data-confirm'))) return;
+                  var tr = this.parentNode.parentNode;
+                  tr.parentNode.removeChild (tr.nextSibling);
+                  tr.parentNode.removeChild (tr);
+                " data-confirm="Delete this item?">Delete</button>
+            <tr>
+              <td><textarea name=source-body required>%s</textarea>
+              <td><textarea name=comment-for-translator>%s</textarea>
+              <td><textarea name=comment-for-customer>%s</textarea>
+          }, 
+              htescape $_->{msgid}, htescape $_->{msgargs},
+              htescape $_->{msgid}, htescape $_->{msgargs},
+              htescape $_->{source_body},
+              htescape $_->{comment_for_translator},
+              htescape $_->{comment_for_customer};
+        } @$items;
+
         my $html = sprintf q{
           <!DOCTYPE HTML>
           <html lang=en>
@@ -690,28 +795,26 @@ sub process ($$) {
           %s
           <h1>Submit jobs</h1>
 
-          <form action="/job/submit" method=POST onclick="
+          <form action="/job/submit" method=POST onsubmit="
             return confirm (this.getAttribute ('data-confirm'));
           " data-confirm="Submit these jobs?">
             <table class=job-submit-texts>
               <thead>
                 <tr>
-                  <th colspan=2>Texts
+                  <th>Texts
+                  <th>Comment for translator
+                  <th>Notes (private)
               <tbody>
-                <tr>
-                  <td><textarea name=source-body required></textarea>
-                  <td><button type=button onclick="
-                    if (!confirm (this.getAttribute ('data-confirm'))) return;
-                    var tr = this.parentNode.parentNode;
-                    tr.parentNode.removeChild (tr);
-                  " data-confirm="Delete this item?">Delete</button>
+                %s
               <tfoot>
                 <tr>
-                  <td>
-                  <td><button type=button onclick="
+                  <td colspan=3><button type=button onclick="
                     var table = this.parentNode.parentNode.parentNode.parentNode;
                     var tr = document.createElement ('tr');
-                    tr.innerHTML = table.getAttribute ('data-template');
+                    tr.innerHTML = table.getAttribute ('data-template-1');
+                    table.tBodies[0].appendChild (tr);
+                    var tr = document.createElement ('tr');
+                    tr.innerHTML = table.getAttribute ('data-template-2');
                     table.tBodies[0].appendChild (tr);
                   ">Add</button>
             </table>
@@ -719,7 +822,9 @@ sub process ($$) {
               var tables = document.querySelectorAll ('table');
               var table = tables[tables.length - 1];
               var trHTML = table.getElementsByTagName ('tr')[1].innerHTML;
-              table.setAttribute ('data-template', trHTML);
+              table.setAttribute ('data-template-1', trHTML);
+              var trHTML = table.getElementsByTagName ('tr')[2].innerHTML;
+              table.setAttribute ('data-template-2', trHTML);
             </script>
 
             <table>
@@ -751,7 +856,10 @@ sub process ($$) {
             </table>
 
           </form>
-        }, $class->header_html ($app), lang_options_html, lang_options_html;
+        }, $class->header_html ($app),
+            $items_html,
+            lang_options_html (current_value => $source_lang),
+            lang_options_html (current_value => $target_lang);
         $app->send_html ($html);
         $app->throw;
       }

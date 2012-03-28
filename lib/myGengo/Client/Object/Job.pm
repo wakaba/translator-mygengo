@@ -146,6 +146,10 @@ sub feedback_synced_time ($) {
   return $_[0]->row->get ('feedback_updated');
 } # feedback_synced_time
 
+sub repo_data ($) {
+  return $_[0]->{repo_data} ||= $_[0]->row->get ('repo_data') || {};
+} # repo_data
+
 sub path ($) {
   my $self = shift;
   return "/job/" . $self->job_id;
@@ -180,6 +184,7 @@ sub as_dumpable ($) {
     comments => $row->get ('comments'),
     feedback => $row->get ('feedback'),
     revisions => $row->get ('revisions'),
+    repo_data => $row->get ('repo_data'),
   };
 } # as_dumpable
 
