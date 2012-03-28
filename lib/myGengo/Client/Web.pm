@@ -130,7 +130,7 @@ sub sync_jobs_from_res ($;%) {
     $db->table ('job')->insert ([{
       id => $job->{job_id},
       job_group_id => $job_group_id,
-      callback_key => $args{callback_key} || 0,
+      callback_key => $job->{custom_data} || 0,
       source_lang => $job->{source}->{lang} // '',
       source_body => $job->{source}->{body} // '',
       target_lang => $job->{target}->{lang} // '',
@@ -664,6 +664,8 @@ sub process ($$) {
         my $tier = $app->bare_param ('tier');
 
         my $callback_url = $ws->callback_url;
+        require myGengo::Client::MySQL;
+        require Dongry::Database;
         my $callback_key = Dongry::Database->load ('mygengo')
             ->execute ('select uuid_short () as uuid')->first->{uuid};
         my $jobs = $app->text_param_list ('source-body')->map (sub {
@@ -677,7 +679,7 @@ sub process ($$) {
         my $res = $ws->job_post
             ($jobs, as_group => (@$jobs > 1 && $app->bare_param ('as-group')));
         $app->throw_mygengo_error ($res) if $res->is_error;
-        sync_jobs_from_res $res, callback_key => $callback_key; # XXX author_id => ...
+        sync_jobs_from_res $res; # XXX author_id => ...
         $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
       } else {
         my $html = sprintf q{
@@ -751,7 +753,7 @@ sub process ($$) {
         $app->throw;
       }
     } elsif ($path->[1] eq 'callback') {
-      #warn Dumper $http->request_body_params;
+      warn Dumper $http->request_body_params;
 
       require WebService::myGengo::Lite;
       my $ws = WebService::myGengo::Lite->new;
@@ -764,14 +766,14 @@ sub process ($$) {
           or $app->throw_error (404);
 
       my $key_from_db = $job_row->get ('callback_key');
+      warn $key_from_db;
       if (not $obj->{custom_data} or
           not $key_from_db or
           $obj->{custom_data} ne $key_from_db) {
         $app->throw_error (403);
       }
 
-      warn $job_id;
-      # XXX
+      $class->sync_job_by_id ($app, $job_id, job_row => $job_row);
 
       $app->send_plain_text ('Thanks!');
       $app->throw;
@@ -790,18 +792,7 @@ sub process ($$) {
       #$app->throw;
     } elsif ($path->[2] eq 'sync') {
       $app->requires_request_method ({POST => 1});
-
-      my $ws = $app->mygengo_webservice;
-      my $res = $ws->job_get ($path->[1]);
-      $app->throw_mygengo_error ($res) if $res->is_error;
-
-      sync_jobs_from_res $res;
-      my $job_row = $app->requires_mygengo_job_row ($path->[1]);
-
-      $class->sync_job_comments ($app, $ws, $job_row);
-      $class->sync_job_feedback ($app, $ws, $job_row);
-      $class->sync_job_revisions ($app, $ws, $job_row);
-
+      $class->sync_job_by_id ($app, $path->[1]);
       $app->throw_redirect (q</job/> . $path->[1]);
     }
 
@@ -996,6 +987,20 @@ sub process ($$) {
   }
   $app->throw_error (404);
 } # process
+
+sub sync_job_by_id ($$$;%) {
+  my ($class, $app, $job_id, %args) = @_;
+  my $ws = $app->mygengo_webservice;
+  my $res = $ws->job_get ($job_id);
+  $app->throw_mygengo_error ($res) if $res->is_error;
+
+  sync_jobs_from_res $res;
+  my $job_row = $args{job_row} || $app->requires_mygengo_job_row ($job_id);
+
+  $class->sync_job_comments ($app, $ws, $job_row);
+  $class->sync_job_feedback ($app, $ws, $job_row);
+  $class->sync_job_revisions ($app, $ws, $job_row);
+} # sync_job_by_id
 
 sub sync_job_comments ($$$$) {
   my ($class, $app, $ws, $job_row) = @_;
