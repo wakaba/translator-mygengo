@@ -97,8 +97,11 @@ $Dongry::Database::Registry->{mygengo} = {
 use Path::Class;
 use JSON::Functions::XS qw(file2perl);
 
+my $config_file_name = $ENV{MYGENGO_CLIENT_MYSQL_DSNS_JSON}
+    || 'config/mysql/dsns.json';
+
 my $config_f = file (__FILE__)->dir->parent->parent->parent
-    ->subdir ('config', 'mysql')->file ('dsns.json');
+    ->file ($config_file_name);
 my $dsns = file2perl $config_f;
 
 for (keys %{$dsns->{dsns}}) {
