@@ -461,7 +461,7 @@ sub process ($$) {
           <tbody>
             <tr>
               <th colspan=2>Message ID
-              <td>%s %s
+              <td><a href="%s">%s</a> %s
           <tbody>
             <tr>
               <th rowspan=3>Source
@@ -639,6 +639,9 @@ sub process ($$) {
           $job->job_id,
           $class->header_html ($app),
           $job->job_id,
+          htescape ($app->translator_repo->get_msg_permalink_url_as_string
+                        (langs => [$job->source_lang, $job->target_lang],
+                         msgid => $job->repo_data->{msgid})),
           htescape $job->repo_data->{msgid},
           htescape $job->repo_data->{msgargs},
           htescape lang $job->source_lang,

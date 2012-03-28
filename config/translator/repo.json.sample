@@ -1,0 +1,4 @@
+{
+  "msg_update_url": "http://repo.translator.example/entries/mygengo",
+  "msg_permalink_url": "http://repo.translator.example/entries.{langs}?msgid={msgid}"
+}

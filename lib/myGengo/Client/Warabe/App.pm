@@ -57,5 +57,13 @@ sub requires_mygengo_job_row ($$) {
   return $job;
 } # requires_mygengo_job_row
 
+sub translator_repo ($) {
+  my $self = shift;
+  return $self->{translator_repo} ||= do {
+    require myGengo::Client::TranslationRepository;
+    myGengo::Client::TranslationRepository->new;
+  };
+} # translator_repo
+
 1;
 
