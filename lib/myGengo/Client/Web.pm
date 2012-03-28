@@ -420,11 +420,11 @@ sub process ($$) {
                  ? '<p class=warning><strong>Not found at myGengo server!</strong>' : ''),
             (('<p>' . htescape $event->label) . 
              (defined $comment1 and length $comment1
-                  ? '<p><strong>For translator</strong>: ' .
+                  ? '<p><strong>For myGengo translator</strong>: ' .
                     htescape $comment1
                   : '') .
              (defined $comment2 and length $comment2
-                  ? '<p><strong>For myGengo</strong>: ' .
+                  ? '<p><strong>For myGengo admin</strong>: ' .
                     (htescape $comment2) .
                     ($event->comment_is_public ? ' (Public)' : '')
                   : '')) .
@@ -443,7 +443,7 @@ sub process ($$) {
         $feedback_html = sprintf q{
           <section>
             <h2>Feedback</h2>
-            <p><strong>For translator</strong>: %s (%s)
+            <p><strong>For myGengo translator</strong>: %s (%s)
           </section>
         },
             htescape $job->feedback_comment_for_translator,
@@ -530,10 +530,10 @@ sub process ($$) {
                       <td><input type=range name=rating
                               value=3.0 min=0.0 max=5.0>
                     <tr>
-                      <th>Comment for translator
+                      <th>Comment for myGengo translator
                       <td><textarea name=comment></textarea>
                     <tr>
-                      <th>Comment for myGengo
+                      <th>Comment for myGengo admin
                       <td>
                         <textarea name=comment-for-mygengo></textarea>
                         <p><label>
@@ -809,7 +809,7 @@ sub process ($$) {
               <thead>
                 <tr>
                   <th>Texts
-                  <th>Comment for translator
+                  <th>Comment for myGengo translator
                   <th>Notes (private)
               <tbody>
                 %s
