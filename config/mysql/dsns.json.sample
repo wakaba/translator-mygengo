@@ -1,0 +1,3 @@
+{"dsns":{
+  "mygengo":"DBI:mysql:dbname=mygengo_devel;socket=foo;user=bar"
+}}

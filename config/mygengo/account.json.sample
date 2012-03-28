@@ -1,0 +1,6 @@
+{
+  "api_key": "hogehoge",
+  "private_key": "fugafuga",
+  "is_production": false,
+  "callback_url": "http://foo.example.com/job/callback"
+}
