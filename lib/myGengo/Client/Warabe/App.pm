@@ -65,5 +65,13 @@ sub translator_repo ($) {
   };
 } # translator_repo
 
+use Path::Class;
+use JSON::Functions::XS qw(file2perl);
+
+my $config_file_name = $ENV{MYGENGO_CLIENT_WARABE_CONFIG_PM};
+if ($config_file_name) {
+    do $config_file_name or die $@;
+}
+
 1;
 
