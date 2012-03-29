@@ -101,8 +101,8 @@ use JSON::Functions::XS qw(file2perl);
 my $config_file_name = $ENV{MYGENGO_CLIENT_MYSQL_DSNS_JSON}
     || 'config/mysql/dsns.json';
 
-my $config_f = file (__FILE__)->dir->parent->parent->parent
-    ->file ($config_file_name);
+my $config_f = file ($config_file_name)
+    ->absolute(file (__FILE__)->dir->parent->parent->parent);
 my $dsns = file2perl $config_f;
 
 for (keys %{$dsns->{dsns}}) {

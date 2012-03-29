@@ -32,8 +32,8 @@ use JSON::Functions::XS qw(file2perl);
 my $config_file_name = $ENV{MYGENGO_CLIENT_TRANSLATION_REPOSITORY_JSON}
     || 'config/translator/repo.json';
 
-my $config_f = file (__FILE__)->dir->parent->parent->parent
-    ->file ($config_file_name);
+my $config_f = file ($config_file_name)
+    ->absolute(file (__FILE__)->dir->parent->parent->parent);
 $Config = file2perl $config_f;
 
 1;
