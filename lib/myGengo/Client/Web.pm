@@ -748,7 +748,11 @@ sub process ($$) {
 
         $class->sync_job_comments ($app, $ws, $_) for @$job_rows;
 
-        $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
+        if ($res->data->{group_id}) {
+          $app->throw_redirect ('/job/?group-id=' . $res->data->{group_id});
+        } else {
+          $app->throw_redirect ('/job/' . $res->jobs->[0]->{job_id});
+        }
       } else {
         my $input_json = $app->bare_param ('from-repo');
         if ($input_json) {
