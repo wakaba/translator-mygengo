@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use Data::Dumper;
 use JSON::Functions::XS qw(json_bytes2perl);
+use Web::UserAgent::Functions qw(http_post);
 
 sub htescape ($) {
   my $s = $_[0];
@@ -130,6 +131,17 @@ sub sync_jobs_from_res ($;%) {
   my $repo_data = $args{callback_key_to_repo_data} || {};
   my @job_row;
   for my $job (@{$res->jobs || []}) {
+    my $job_repo_data = $repo_data->{$job->{custom_data} || 0};
+    my $job_repo_data_row;
+    if (not $job_repo_data) {
+      $job_repo_data_row = $db->table ('job_repo_data')->find
+          ({job_id => $job->{job_id}}, source_name => 'master');
+      if ($job_repo_data_row) {
+        $job_repo_data = $job_repo_data_row->get ('repo_data') || {};
+      } else {
+        $job_repo_data = {};
+      }
+    }
     push @job_row, $db->table ('job')->insert ([{
       id => $job->{job_id},
       job_group_id => $job_group_id,
@@ -142,10 +154,14 @@ sub sync_jobs_from_res ($;%) {
       status => $job->{status},
       data => {%$job},
       data_updated => time,
-      repo_msgid => ($repo_data->{$job->{custom_data} || 0} || {})->{msgid},
-      repo_data => ($repo_data->{$job->{custom_data} || 0} || {}),
+      repo_msgid => $job_repo_data->{msgid},
+      repo_data => $job_repo_data,
       updated => time,
     }], duplicate => 'replace')->first_as_row;
+    $db->table ('job_repo_data')->insert ([{
+      job_id => $job->{job_id},
+      repo_data => $job_repo_data,
+    }], duplicate => 'ignore') unless $job_repo_data_row;
   }
   return \@job_row;
 } # sync_jobs_from_res
@@ -328,7 +344,7 @@ sub process ($$) {
         if ($action eq 'approve') {
           my %param = (comment_for_translator => $app->text_param ('comment'),
                        comment_for_mygengo => $app->text_param ('comment-for-mygengo'),
-                       comment_is_public => $app->text_param ('comment-is-public'),
+                       comment_is_public => $app->text_param ('comment-is-public') || 0,
                        rating => $app->text_param ('rating'));
           my $res = $ws->job_approve ($path->[1], %param);
           $app->throw_mygengo_error ($res) if $res->is_error;
@@ -342,8 +358,12 @@ sub process ($$) {
           });
 
           sync_jobs_from_res $ws->job_get ($path->[1]);
+          $job_row = $job_row->reload;
+
           $class->sync_job_feedback ($app, $ws, $job_row);
           $class->sync_job_revisions ($app, $ws, $job_row);
+
+          $class->post_approved_job_to_repo ($app, $job_row);
 
           $app->throw_redirect (q</job/> . $path->[1]);
         } elsif ($action eq 'reject') {
@@ -526,9 +546,13 @@ sub process ($$) {
                 <table>
                   <tbody>
                     <tr>
-                      <th>Rating
-                      <td><input type=range name=rating
-                              value=3.0 min=0.0 max=5.0>
+                      <th>Text
+                      <td>%s
+                  <tbody>
+                    <tr>
+                      <th>Rating (1.0 [bad] - 5.0 [good])
+                      <td><input type=number name=rating
+                              value=3.0 min=1.0 max=5.0>
                     <tr>
                       <th>Comment for myGengo translator
                       <td><textarea name=comment></textarea>
@@ -665,6 +689,7 @@ sub process ($$) {
           $feedback_html,
 
           htescape $job->action_path,
+          $target_html,
           htescape $job->repo_data->{msgid},
           htescape $job->repo_data->{msgargs},
           htescape (join "\n\n",
@@ -1205,5 +1230,36 @@ sub sync_job_revisions ($$$$) {
     });
   }
 } # sync_job_revisions
+
+sub post_approved_job_to_repo ($$$) {
+  my ($class, $app, $job_row) = @_;
+  
+  my $msgid = $app->text_param ('msgid');
+  my $body = $job_row->get ('target_body');
+  if (defined $msgid and length $msgid and
+      defined $body and length $body) {
+    my $repo = $app->translator_repo;
+    my $tag = $job_row->get ('job_group_id');
+    $tag = $tag ? 'mygengo-jobgroup-' . $tag : undef;
+    my ($req, $res) = http_post
+        url => $repo->get_msg_update_url_as_string,
+        header_fields => {
+            Authorization => $repo->get_repo_authorization,
+        },
+        params => {
+          api_key => $repo->get_msg_update_api_key,
+          msgid => $msgid,
+          msgargs => $app->text_param ('msgargs'),
+          body => $body,
+          comment => $app->text_param ('comment-for-consumer'),
+          additional_tag => $tag,
+        };
+    if ($res->is_error) {
+      $app->http->set_status (500);
+      $app->send_plain_text ($res->status_line);
+      $app->throw;
+    }
+  }
+} # post_approved_job_to_repo
 
 1;

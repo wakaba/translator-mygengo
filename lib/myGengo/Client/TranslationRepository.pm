@@ -26,6 +26,14 @@ sub get_msg_permalink_url_as_string ($%) {
   return $url;
 } # get_msg_permalink_url_as_string
 
+sub get_repo_authorization ($) {
+  return $Config->{repo_authorization};
+} # get_repo_authorization
+
+sub get_msg_update_api_key ($) {
+  return $Config->{msg_update_api_key};
+} # get_msg_update_api_key
+
 use Path::Class;
 use JSON::Functions::XS qw(file2perl);
 
