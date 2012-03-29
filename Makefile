@@ -17,7 +17,8 @@ Makefile.setupenv:
 remotedev-test remotedev-reset remotedev-reset-setupenv \
 config/perl/libs.txt local-perl generatepm \
 perl-exec perl-version \
-carton-install carton-update local-submodules: %: Makefile-setupenv
+carton-install carton-update carton-install-module \
+local-submodules: %: Makefile-setupenv
 	make --makefile Makefile.setupenv $@
 
 ## ------ Tests ------
