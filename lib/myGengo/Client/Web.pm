@@ -922,7 +922,7 @@ sub process ($$) {
         $app->throw;
       }
     } elsif ($path->[1] eq 'callback') {
-      warn Dumper $http->request_body_params;
+      #warn Dumper $http->request_body_params;
 
       require WebService::myGengo::Lite;
       my $ws = WebService::myGengo::Lite->new;
@@ -935,7 +935,6 @@ sub process ($$) {
           or $app->throw_error (404);
 
       my $key_from_db = $job_row->get ('callback_key');
-      warn $key_from_db;
       if (not $obj->{custom_data} or
           not $key_from_db or
           $obj->{custom_data} ne $key_from_db) {
