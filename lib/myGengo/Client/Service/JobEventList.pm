@@ -90,6 +90,8 @@ sub event_list ($) {
           if ($cc_row) {
               my $diff = $cc_row->get('created') - $comment->timestamp;
               $diff = -$diff if $diff < 0;
+          warn "CCROW: $diff";
+          
               undef $cc_row unless $diff < 60;
               
               if ($cc_row) {
