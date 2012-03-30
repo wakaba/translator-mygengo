@@ -92,9 +92,11 @@ sub event_list ($) {
               $diff = -$diff if $diff < 0;
               undef $cc_row unless $diff < 60;
               
-              delete $cc_rows_by_time->{$comment->timestamp};
-              delete $cc_rows_by_body->{$comment->comment_for_translator};
-              $comment->set_row ($cc_row);
+              if ($cc_row) {
+                  delete $cc_rows_by_time->{$comment->timestamp};
+                  delete $cc_rows_by_body->{$comment->comment_for_translator};
+                  $comment->set_row ($cc_row);
+              }
           }
       }
     });
