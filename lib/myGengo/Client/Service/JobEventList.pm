@@ -73,6 +73,7 @@ sub event_list ($) {
     my $cc_rows = $db->table ('customer_comment')->find_all
         ({job_id => $job_id});
     my $cc_rows_by_time = {map { $_->get ('created') => $_ } @$cc_rows};
+    my $cc_rows_by_body = {map { $_->get ('body') => $_ } @$cc_rows};
 
     $comments->each (sub {
       my $comment = $_;
@@ -81,7 +82,20 @@ sub event_list ($) {
       $cc_row = undef if $cc_row and $cc_row->get ('body') ne $comment->comment_for_translator;
       if ($cc_row) {
         delete $cc_rows_by_time->{$comment->timestamp};
+        delete $cc_rows_by_body->{$comment->comment_for_translator};
         $comment->set_row ($cc_row);
+      } else {
+          $cc_row = $comment->author_type eq 'customer'
+              ? $cc_rows_by_body->{$comment->comment_for_translator} : undef;
+          if ($cc_row) {
+              my $diff = $cc_row->get('timestamp') - $comment->timestamp;
+              $diff = -$diff if $diff < 0;
+              undef $cc_row unless $diff < 60;
+              
+              delete $cc_rows_by_time->{$comment->timestamp};
+              delete $cc_rows_by_body->{$comment->comment_for_translator};
+              $comment->set_row ($cc_row);
+          }
       }
     });
     $result->append ($comments);
