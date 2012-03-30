@@ -1283,6 +1283,9 @@ sub process ($$) {
         th a {
           color: inherit;
         }
+        th a:hover {
+          color: black;
+        }
         th a.newtab {
           display: block;
           text-align: right;
