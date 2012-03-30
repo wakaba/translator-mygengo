@@ -87,9 +87,13 @@ sub event_list ($) {
       } else {
           $cc_row = $comment->author_type eq 'customer'
               ? $cc_rows_by_body->{$comment->comment_for_translator} : undef;
+          warn "CCROW: $cc_row";
+          
           if ($cc_row) {
               my $diff = $cc_row->get('timestamp') - $comment->timestamp;
               $diff = -$diff if $diff < 0;
+              warn "diff: $diff";
+              
               undef $cc_row unless $diff < 60;
               
               if ($cc_row) {
