@@ -102,8 +102,8 @@ my $dsns = file2perl $config_f;
 
 for (keys %{$dsns->{dsns}}) {
   my $sources = $Dongry::Database::Registry->{$_}->{sources};
-  $sources->{default}->{dsn} = $dsns->{dsns}->{$_};
-  $sources->{master}->{dsn} = $dsns->{dsns}->{$_};
+  $sources->{default}->{dsn} = $dsns->{dsns}->{$_ . '_slave'};
+  $sources->{master}->{dsn} = $dsns->{dsns}->{$_ . '_master'};
 }
 
 1;

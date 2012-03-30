@@ -1,3 +1,4 @@
 {"dsns":{
-  "mygengo":"DBI:mysql:dbname=mygengo_devel;socket=foo;user=bar"
+  "mygengo_master":"DBI:mysql:dbname=mygengo_devel;socket=foo;user=bar"
+  "mygengo_slave":"DBI:mysql:dbname=mygengo_devel;socket=foo;user=bar"
 }}
