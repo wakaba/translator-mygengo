@@ -85,21 +85,19 @@ sub event_list ($) {
         delete $cc_rows_by_body->{$comment->comment_for_translator};
         $comment->set_row ($cc_row);
       } else {
-          $cc_row = $comment->author_type eq 'customer'
-              ? $cc_rows_by_body->{$comment->comment_for_translator} : undef;
-          if ($cc_row) {
-              my $diff = $cc_row->get('created') - $comment->timestamp;
-              $diff = -$diff if $diff < 0;
-          warn "CCROW: $diff";
+        $cc_row = $comment->author_type eq 'customer'
+            ? $cc_rows_by_body->{$comment->comment_for_translator} : undef;
+        if ($cc_row) {
+          my $diff = $cc_row->get ('created') - $comment->timestamp;
+          $diff = -$diff if $diff < 0;
+          undef $cc_row unless $diff < 60;
           
-              undef $cc_row unless $diff < 60;
-              
-              if ($cc_row) {
-                  delete $cc_rows_by_time->{$comment->timestamp};
-                  delete $cc_rows_by_body->{$comment->comment_for_translator};
-                  $comment->set_row ($cc_row);
-              }
+          if ($cc_row) {
+            delete $cc_rows_by_time->{$cc_row->get ('created')};
+            delete $cc_rows_by_body->{$comment->comment_for_translator};
+            $comment->set_row ($cc_row);
           }
+        }
       }
     });
     $result->append ($comments);
