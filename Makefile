@@ -16,10 +16,11 @@ Makefile.setupenv:
 
 remotedev-test remotedev-reset remotedev-reset-setupenv \
 config/perl/libs.txt local-perl generatepm \
-perl-exec perl-version \
+perl-exec perl-version pmbundler-install \
 carton-install carton-update carton-install-module \
 local-submodules: %: Makefile-setupenv
-	make --makefile Makefile.setupenv $@
+	make --makefile Makefile.setupenv pmbundler-repo-update $@ \
+            PMBUNDLER_REPO_URL=$(PMBUNDLER_REPO_URL)
 
 ## ------ Tests ------
 
