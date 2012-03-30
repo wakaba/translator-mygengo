@@ -115,6 +115,7 @@ sub lang_options_html (;%) {
 
 sub status ($) {
   return {
+    added => 'Added',
     available => 'Available',
     approved => 'Approved',
     held => 'Held',
