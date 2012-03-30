@@ -1250,6 +1250,7 @@ sub post_approved_job_to_repo ($$$) {
           api_key => $repo->get_msg_update_api_key,
           msgid => $msgid,
           msgargs => $app->text_param ('msgargs'),
+          lang => $job_row->get ('target_lang'),
           body => $body,
           comment => $app->text_param ('comment-for-consumer'),
           additional_tag => $tag,
