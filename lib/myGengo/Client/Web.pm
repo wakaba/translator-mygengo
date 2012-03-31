@@ -1485,6 +1485,13 @@ sub process ($$) {
           background-color: #ffefe5;
         }
 
+        .item-list tbody tr.status-reviewable {
+          background-color: #FFF8F9;
+        }
+        .item-list tbody tr.status-reviewable:nth-child(2n) {
+          background-color: #ffefe5;
+        }
+
         .for-mygengo-customer {
           background-color: #ffefe5;
         }
