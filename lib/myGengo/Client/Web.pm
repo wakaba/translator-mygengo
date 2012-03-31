@@ -446,17 +446,20 @@ sub process ($$) {
         my $event = $_;
         my $comment1 = $event->comment_for_translator;
         my $comment2 = $event->comment_for_mygengo;
+        my $comment3 = $event->comment_for_customer;
         return sprintf q{
-          <article>
-            <header>
-              %s
-            </header>
-            %s
-            <footer>
+          <article class="event event-%s by-%s">
+            <footer class=header>
               %s
             </footer>
+            %s
+            <footer class=footer>
+              %s
+            </footer class=footer>
           </article>
         },
+            htescape $event->type,
+            htescape $event->author_type,
             ('<p>' . htescape ($event->author_id
                                    ? $event->author_id .
                                      ' (' .
@@ -466,21 +469,25 @@ sub process ($$) {
             ($event->not_found_at_server
                  ? '<p class=warning><strong>Not found at myGengo server!</strong>' : ''),
             (('<p>' . htescape $event->label) . 
+             (defined $comment3 and length $comment3
+                  ? '<p class=for-mygengo-customer><strong>For customer</strong>: ' .
+                    htescape $comment3
+                  : '') .
              (defined $comment1 and length $comment1
-                  ? '<p><strong>For myGengo translator</strong>: ' .
+                  ? '<p class=for-mygengo-translator><strong>For myGengo translator</strong>: ' .
                     htescape $comment1
                   : '') .
+             ($event->reason
+                  ? '<p class=for-mygengo-translator><strong>Reason</strong>: ' .
+                    htescape $event->reason : '') .
              (defined $comment2 and length $comment2
-                  ? '<p><strong>For myGengo admin</strong>: ' .
+                  ? '<p class=for-mygengo-admin><strong>For myGengo admin</strong>: ' .
                     (htescape $comment2) .
                     ($event->comment_is_public ? ' (Public)' : '')
                   : '')) .
-            ($event->reason
-                 ? '<p><strong>Reason</strong>: ' .
-                   htescape $event->reason : '') .
-            ($event->follow_up
-                 ? '<p><strong>Follow up</strong>: ' .
-                   htescape $event->follow_up : ''),
+             ($event->follow_up
+                  ? '<p><strong>Follow up</strong>: ' .
+                    htescape $event->follow_up : ''),
             (htescape timestamp $event->timestamp) .
             ($event->client_record_id ? ' / #' . $event->client_record_id : '');
       })->join ('');
@@ -488,9 +495,9 @@ sub process ($$) {
       my $feedback_html = '';
       if ($job->has_feedback) {
         $feedback_html = sprintf q{
-          <section>
+          <section id=feedback>
             <h2>Feedback</h2>
-            <p><strong>For myGengo translator</strong>: %s (%s)
+            <p class=for-mygengo-translator><strong>For myGengo translator</strong>: %s (%s)
           </section>
         },
             htescape $job->feedback_comment_for_translator,
@@ -500,191 +507,217 @@ sub process ($$) {
       my $html = sprintf q{ 
         <!DOCTYPE HTML>
         <html lang=en>
-        <title>Job #%d</title>
+        <title>Job #%d - myGengo job manager</title>
         <link rel=stylesheet href="/css/mygengo-client">
-        %s
-        <h1>Job #%d</h1>
-        <table>
-          <tbody>
-            <tr>
-              <th colspan=2>Message ID
-              <td><a href="%s">%s</a> %s
-          <tbody>
-            <tr>
-              <th rowspan=3>Source
-              <th>Language
-              <td>%s
-            <tr>
-              <th>Text
-              <td lang="%s">%s
-            <tr>
-              <th>Unit count
-              <td>%d
-          <tbody>
-            <tr>
-              <th rowspan=3>Target
-              <th>Language
-              <td>%s
-            <tr>
-              <th>Text
-              <td lang="%s">%s
-            <tr>
-              <th>Is machine-translation
-              <td>%s
-          <tbody>
-            <tr>
-              <th rowspan=2>Status
-              <th>Current
-              <td>%s
-            <tr>
-              <th>Auto-approve
-              <td>%s
-            <tr>
-              <th colspan=2>Group
-              <td>%s
-            <tr>
-              <th colspan=2>Updated
-              <td>%s
-          <tbody>
-            <tr>
-              <th colspan=2>Quality level
-              <td>%s
-            <tr>
-              <th colspan=2>Credit price
-              <td>%s
-            <tr>
-              <th colspan=2>Estimated time
-              <td>%s
-          <tbody>
-            <tr>
-              <th colspan=2>Note (private)
-              <td>%s
-        </table>
-
         %s
 
         <section>
-          <h2>Actions</h2>
+          <h1>Job #%d</h1>
 
-          <menu>
-            <li>Approve:
-              <form action="%s" method=POST>
-                <input type=hidden name=action value=approve>
-                <table>
-                  <tbody>
-                    <tr>
-                      <th>Text
-                      <td>%s
-                  <tbody>
-                    <tr>
-                      <th>Rating (1.0 [bad] - 5.0 [good])
-                      <td><input type=number name=rating
-                              value=3.0 min=1.0 max=5.0>
-                    <tr>
-                      <th>Comment for myGengo translator
-                      <td><textarea name=comment></textarea>
-                    <tr>
-                      <th>Comment for myGengo admin
-                      <td>
-                        <textarea name=comment-for-mygengo></textarea>
-                        <p><label>
-                          <input type=checkbox name=comment-is-public value=1>
-                          Public
-                        </label>
-                  <tbody>
-                    <tr>
-                      <th>Message ID
-                      <td><input name=msgid value="%s">
-                    <tr>
-                      <th>Arguments
-                      <td><input name=msgargs value="%s">
-                    <tr>
-                      <th>Note
-                      <td><textarea name=comment-for-consumer>%s</textarea>
-                  <tfoot>
-                    <tr>
-                      <td colspan=2>
-                        <button type=submit %s>
-                          Approve
-                        </button>
-                </table>
-              </form>
-            <li>Reject:
-              <form action="%s" method=POST>
-                <input type=hidden name=action value=reject>
-                <table>
-                  <tbody>
-                    <tr>
-                      <th>Reason
-                      <td>
-                        <select name=reason>
-                          <option value=quality>Quality
-                          <option value=incomplete>Incomplete
-                          <option value=other>Other
-                        </select>
-                    <tr>
-                      <th>Follow-up
-                      <td>
-                        <select name=follow-up>
-                          <option value=requeue>Requeue
-                          <option value=cancel>Cancel
-                        </select>
-                    <tr>
-                      <th>Comment
-                      <td><textarea name=comment required></textarea>
-                    <tr>
-                      <th><img src="%s" onload="
-                        this.removeAttribute ('alt');
-                      " alt="CAPTCHA image error">
-                      <td><input name=captcha autocomplete=off
-                          placeholder="Input the shown text" required>
-                  <tfoot>
-                    <tr>
-                      <td colspan=2>
-                        <button type=submit %s>
-                          Reject
-                        </button>
-                </table>
-             </form>
+          <nav>
+            <a href="#actions">Actions</a>
+            <a href="#comments">Events</a>
+          </nav>
 
-            <li><form action="%s" method=post>
-              <input type=hidden name=action value=cancel>
-              <button type=submit %s>Cancel</button>
-            </form>
-
-            <li><form action="%s" method=post>
-              <button type=submit>Sync the job</button>
-            </form>
-          </menu>
-        </section>
-
-        <section id=comments>
-          <h2>Events</h2>
+          <table class=prop-list>
+            <tbody>
+              <tr>
+                <th colspan=2>Message ID
+                <td><a href="%s">%s</a> %s
+            <tbody>
+              <tr>
+                <th rowspan=3>Source
+                <th>Language
+                <td>%s
+              <tr class=text-row>
+                <th>Text
+                <td lang="%s">%s
+              <tr>
+                <th>Unit count
+                <td>%d
+            <tbody class="status-%s">
+              <tr>
+                <th rowspan=3>Target
+                <th>Language
+                <td>%s
+              <tr class=text-row>
+                <th>Text
+                <td lang="%s">%s
+              <tr>
+                <th>Is machine-translation
+                <td>%s
+            <tbody>
+              <tr class="status-%s">
+                <th rowspan=2>Status
+                <th>Current
+                <td>%s
+              <tr>
+                <th>Auto-approve
+                <td>%s
+              <tr>
+                <th colspan=2>Group
+                <td>%s
+              <tr>
+                <th colspan=2>Updated
+                <td>%s
+            <tbody>
+              <tr>
+                <th colspan=2>Quality level
+                <td>%s
+              <tr>
+                <th colspan=2>Credit price
+                <td>%s
+              <tr>
+                <th colspan=2>Estimated time
+                <td>%s
+            <tbody>
+              <tr class=for-mygengo-customer>
+                <th colspan=2>Notes (private)
+                <td>%s
+          </table>
 
           %s
 
-          <article>
-            <form action="%s" method=post>
-              <table>
-                <tbody>
-                  <tr>
-                    <th>Author
-                    <td>Customer
-                  <tr>
-                    <th>Text
-                    <td><textarea name=comment required></textarea>
-                <tfoot>
-                  <tr>
-                    <td colspan=2>
-                      <button type=submit>Post</button>
-              </table>
-            </form>
-          </article>
-        </section>
+          <section id=comments>
+            <h2>Events</h2>
 
-        <section>
-          <h2>Job data dump</h2>
-          <pre>%s</pre>
+            %s
+          </section>
+
+          <section id=actions>
+            <h2>Actions</h2>
+  
+            <menu>
+              <li>
+                <a href="javascript:toggleAction('addcomment')">
+                  Add a comment
+                </a>
+                <form action="%s" method=post class=details id=addcomment
+                    hidden>
+                  <table class="prop-list">
+                    <tbody>
+                      <tr>
+                        <th>Author
+                        <td>Customer
+                      <tr class=for-mygengo-translator>
+                        <th>Comment for myGengo translator
+                        <td><textarea name=comment required></textarea>
+                    <tfoot>
+                      <tr>
+                        <td colspan=2>
+                          <button type=submit>Post</button>
+                  </table>
+                </form>
+
+              <li>
+                <a href="javascript:toggleAction('approveform')">Approve</a>
+                <form action="%s" method=POST class=details id=approveform
+                    hidden>
+                  <input type=hidden name=action value=approve>
+                  <table class=prop-list>
+                    <tbody>
+                      <tr class=text-row>
+                        <th>Text
+                        <td>%s
+                    <tbody>
+                      <tr class=for-mygengo-translator>
+                        <th>Rating
+                        <td>
+                          <input type=number name=rating
+                              value=3.0 min=1.0 max=5.0 step=0.1>
+                          (1.0 [bad] - 5.0 [good])
+                      <tr class=for-mygengo-translator>
+                        <th>Comment for myGengo translator
+                        <td><textarea name=comment></textarea>
+                      <tr class=for-mygengo-admin>
+                        <th>Comment for myGengo admin
+                        <td>
+                          <textarea name=comment-for-mygengo></textarea>
+                          <p><label>
+                            <input type=checkbox name=comment-is-public value=1>
+                            Public
+                          </label>
+                    <tbody>
+                      <tr class=for-mygengo-customer>
+                        <th>Message ID
+                        <td><input name=msgid value="%s">
+                      <tr class=for-mygengo-customer>
+                        <th>Message arguments
+                        <td><input name=msgargs value="%s">
+                      <tr class=for-mygengo-customer>
+                        <th>Notes
+                        <td><textarea name=comment-for-customer>%s</textarea>
+                    <tfoot>
+                      <tr>
+                        <td colspan=2>
+                          <button type=submit %s>
+                            Approve the text
+                          </button>
+                  </table>
+                </form>
+
+              <li>
+                <a href="javascript:toggleAction('rejectform')">Reject</a>
+                <form action="%s" method=POST class=details id=rejectform
+                    hidden>
+                  <input type=hidden name=action value=reject>
+                  <table class=prop-list>
+                    <tbody>
+                      <tr class=for-mygengo-translator>
+                        <th>Reason of rejection
+                        <td>
+                          <select name=reason>
+                            <option value=quality>Quality
+                            <option value=incomplete>Incomplete
+                            <option value=other>Other reason
+                          </select>
+                      <tr class=for-mygengo-translator>
+                        <th>Comment for myGengo translator
+                        <td><textarea name=comment required></textarea>
+                      <tr>
+                        <th>Follow-up
+                        <td>
+                          <select name=follow-up>
+                            <option value=requeue>Requeue for revision
+                            <option value=cancel>Cancel the job
+                          </select>
+                      <tr>
+                        <th><img src="%s" onload="
+                          this.removeAttribute ('alt');
+                        " alt="CAPTCHA image error">
+                        <td><input name=captcha autocomplete=off
+                            placeholder="Input the shown text" required>
+                    <tfoot>
+                      <tr>
+                        <td colspan=2>
+                          <button type=submit %s>
+                            Reject the text
+                          </button>
+                  </table>
+                </form>
+
+              <li>
+                <a href="javascript:toggleAction('cancelform')">Cancel</a>
+                <form action="%s" method=post
+                    class=details id=cancelform hidden>
+                  <input type=hidden name=action value=cancel>
+                  <button type=submit %s>Cancel the job</button>
+                </form>
+
+              <li>
+                <a href="javascript:toggleAction('syncform')">Sync the job</a>
+                <form action="%s" method=post class=details id=syncform hidden>
+                  <button type=submit>
+                    Sync the job with myGengo server
+                  </button>
+                </form>
+            </menu>
+          </section>
+
+          <section>
+            <h2>Job data dump</h2>
+            <pre>%s</pre>
+          </section>
         </section>
       },
           $job->job_id,
@@ -695,12 +728,17 @@ sub process ($$) {
                          msgid => $job->repo_data->{msgid})),
           htescape $job->repo_data->{msgid},
           htescape $job->repo_data->{msgargs},
+
           htescape lang $job->source_lang,
           htescape $job->source_lang, htescape $job->source_body,
           htescape $job->unit_count,
+
+          htescape $job->status,
           htescape lang $job->target_lang,
           htescape $job->target_lang, $target_html,
           htescape boolean $job->target_is_machine_translation,
+
+          htescape $job->status,
           htescape status $job->status,
           htescape boolean $job->auto_approve,
           ($job->job_group_id
@@ -708,12 +746,16 @@ sub process ($$) {
                      $job->job_group_id, $job->job_group_id,
                : '(None)'),
           htescape timestamp $job->updated,
+
           htescape $job->tier,
           htescape price $job->credits,
           htescape time_amount $job->eta,
           htescape $job->repo_data->{comment_for_customer} // '',
 
           $feedback_html,
+
+          $events_html,
+          htescape $job->comment_post_path,
 
           htescape $job->action_path,
           $target_html,
@@ -732,8 +774,7 @@ sub process ($$) {
           htescape $job->action_path,
           $job->is_cancellable ? '' : 'disabled',
           htescape $job->sync_path,
-          $events_html,
-          htescape $job->comment_post_path,
+
           htescape Dumper $job->as_dumpable;
         $app->send_html ($html);
         $app->throw;
@@ -851,7 +892,7 @@ sub process ($$) {
           sprintf q{
             <tr>
               <th colspan=3>
-                %s %s
+                <span class=for-mygengo-customer>%s %s</span>
                 <input type=hidden name=msgid value="%s">
                 <input type=hidden name=msgargs value="%s">
                 <button type=button onclick="
@@ -861,9 +902,12 @@ sub process ($$) {
                   tr.parentNode.removeChild (tr);
                 " data-confirm="Delete this item?">Delete</button>
             <tr>
-              <td><textarea name=source-body required>%s</textarea>
-              <td><textarea name=comment-for-translator>%s</textarea>
-              <td><textarea name=comment-for-customer>%s</textarea>
+              <td class="for-mygengo-translator text-col">
+                <textarea name=source-body required>%s</textarea>
+              <td class="for-mygengo-translator comment-col">
+                <textarea name=comment-for-translator>%s</textarea>
+              <td class="for-mygengo-customer comment-col">
+                <textarea name=comment-for-customer>%s</textarea>
           }, 
               htescape $_->{msgid}, htescape $_->{msgargs},
               htescape $_->{msgid}, htescape $_->{msgargs},
@@ -875,72 +919,77 @@ sub process ($$) {
         my $html = sprintf q{
           <!DOCTYPE HTML>
           <html lang=en>
-          <title>Submit jobs</title>
+          <title>Submit new jobs - myGengo job manager</title>
           <link rel=stylesheet href="/css/mygengo-client">
           %s
-          <h1>Submit jobs</h1>
 
-          <form action="/job/submit" method=POST onsubmit="
-            return confirm (this.getAttribute ('data-confirm'));
-          " data-confirm="Submit these jobs?">
-            <table class=job-submit-texts>
-              <thead>
-                <tr>
-                  <th>Texts
-                  <th>Comment for myGengo translator
-                  <th>Notes (private)
-              <tbody>
-                %s
-              <tfoot>
-                <tr>
-                  <td colspan=3><button type=button onclick="
-                    var table = this.parentNode.parentNode.parentNode.parentNode;
-                    var tr = document.createElement ('tr');
-                    tr.innerHTML = table.getAttribute ('data-template-1');
-                    table.tBodies[0].appendChild (tr);
-                    var tr = document.createElement ('tr');
-                    tr.innerHTML = table.getAttribute ('data-template-2');
-                    table.tBodies[0].appendChild (tr);
-                  ">Add</button>
-            </table>
-            <script>
-              var tables = document.querySelectorAll ('table');
-              var table = tables[tables.length - 1];
-              var trHTML = table.getElementsByTagName ('tr')[1].innerHTML;
-              table.setAttribute ('data-template-1', trHTML);
-              var trHTML = table.getElementsByTagName ('tr')[2].innerHTML;
-              table.setAttribute ('data-template-2', trHTML);
-            </script>
+          <section>
+            <h1>Submit new jobs</h1>
 
-            <table>
-              <tbody>
-                <tr>
-                  <th>Source language
-                  <td><select name=source-lang>%s</select>
-                <tr>
-                  <th>Target language
-                  <td><select name=target-lang>%s</select>
-                <tr>
-                  <th>Quality level
-                  <td>
-                    <select name=tier>
-                      <option value=machine>Machine
-                      <option value=standard>Standard
-                      <option value=pro>Pro
-                      <option value=ultra>Ultra
-                    </select>
-                <tr>
-                  <td colspan=2><label>
-                    <input type=checkbox name=as-group checked value=1>
-                    Submit as a group
-                  </label>
-              <tfoot>
-                <tr>
-                  <td colspan=2>
-                    <button type=submit name=send value=1>Submit</button>
-            </table>
+            <form action="/job/submit" method=POST onsubmit="
+              return confirm (this.getAttribute ('data-confirm'));
+            " data-confirm="Submit these jobs?" class=job-submit-form>
+              <table class="job-submit-texts">
+                <thead>
+                  <tr>
+                    <th class="for-mygengo-translator text-col">Texts
+                    <th class="for-mygengo-translator comment-col">
+                      Comment for myGengo translator
+                    <th class="for-mygengo-customer comment-col">
+                      Notes (private)
+                <tbody>
+                  %s
+                <tfoot>
+                  <tr>
+                    <td colspan=3><button type=button onclick="
+                      var table = this.parentNode.parentNode.parentNode.parentNode;
+                      var tr = document.createElement ('tr');
+                      tr.innerHTML = table.getAttribute ('data-template-1');
+                      table.tBodies[0].appendChild (tr);
+                      var tr = document.createElement ('tr');
+                      tr.innerHTML = table.getAttribute ('data-template-2');
+                      table.tBodies[0].appendChild (tr);
+                    ">Add</button>
+              </table>
+              <script>
+                var tables = document.querySelectorAll ('table');
+                var table = tables[tables.length - 1];
+                var trHTML = table.getElementsByTagName ('tr')[1].innerHTML;
+                table.setAttribute ('data-template-1', trHTML);
+                var trHTML = table.getElementsByTagName ('tr')[2].innerHTML;
+                table.setAttribute ('data-template-2', trHTML);
+              </script>
 
-          </form>
+              <table class=prop-list>
+                <tbody>
+                  <tr>
+                    <th>Source language
+                    <td><select name=source-lang>%s</select>
+                  <tr>
+                    <th>Target language
+                    <td><select name=target-lang>%s</select>
+                  <tr>
+                    <th>Quality level
+                    <td>
+                      <select name=tier>
+                        <option value=machine>Machine
+                        <option value=standard>Standard
+                        <option value=pro>Pro
+                        <option value=ultra>Ultra
+                      </select>
+                  <tr>
+                    <th>Grouping
+                    <td><label>
+                      <input type=checkbox name=as-group checked value=1>
+                      Submit as a group
+                    </label>
+                <tfoot>
+                  <tr>
+                    <td colspan=2>
+                      <button type=submit name=send value=1>Submit</button>
+              </table>
+            </form>
+          </section>
         }, $class->header_html ($app),
             $items_html,
             lang_options_html (current_value => $source_lang),
@@ -1165,7 +1214,7 @@ sub process ($$) {
         }
 
         .item-list tbody tr:nth-child(2n) {
-          background-color: #f7fff7;
+          background-color: #f6FFce;
         }
 
         th, td {
@@ -1189,6 +1238,9 @@ sub process ($$) {
         }
         tbody th {
           text-align: left;
+        }
+        td p {
+          margin: 0;
         }
         th a {
           color: inherit;
@@ -1230,12 +1282,73 @@ sub process ($$) {
           overflow: hidden;
         }
 
+        .prop-list th, .prop-list td {
+          border: 3px solid transparent;
+        }
         .prop-list th {
-          width: 40%;
+          width: 25%;
+          vertical-align: top;
+        }
+        .prop-list th[rowspan] {
+          width: auto;
+        }
+
+        .prop-list .text-row td {
+          font-size: 150%;
+          white-space: pre-wrap;
+        }
+
+        .job-submit-form {
+          margin: 1em;
+        }
+
+        .job-submit-texts {
+          border-collapse: collapse;
+          border: 3px solid #89ca67;
+        }
+
+        .job-submit-texts thead th {
+          background-color: #89ca67;
+          color: white;
+        }
+
+        .job-submit-texts tr:nth-child(4n+3),
+        .job-submit-texts tr:nth-child(4n+4) {
+          background-color: #f6FFce;
+        }
+        .job-submit-texts tr:nth-child(4n+2),
+        .job-submit-texts tr:nth-child(4n+4) {
+          border-bottom: 3px solid #89ca67;
+        }
+
+        .job-submit-texts tbody th {
+          background-color: transparent;
+          color: inherit;
+        }
+
+        .job-submit-texts tbody th button {
+          float: right;
         }
 
         .job-submit-texts td + td {
           text-align: center;
+        }
+
+        .job-submit-texts .text-col {
+          width: 50%;
+        }
+
+        .job-submit-texts .comment-col {
+          width: 25%;
+        }
+
+        .job-submit-texts tfoot td {
+          text-align: right;
+        }
+
+        .job-submit-form table {
+          margin-bottom: 0.5em;
+          padding: 0;
         }
 
         menu {
@@ -1253,11 +1366,85 @@ sub process ($$) {
           content: "\261E  "
         }
 
+        menu li > a {
+          font-size: 150%;
+        }
+
         menu .details {
           background-color: #efefef;
           margin: 0.5em;
-          padding: 0.6em 0.4em;
+          padding: 0.6em;
           border-radius: 0.9em;
+        }
+
+        .details table {
+          margin: 0;
+          padding: 0.6em;
+          border-radius: 0.9em;
+        }
+
+        #feedback p {
+          padding: 0.4em;
+        }
+
+        .event {
+          position: relative;
+          margin: 1em;
+          border: 0.3em #89ca67 solid;
+          border-radius: 0.5em;
+          padding: 0.5em;
+        }
+
+        .event.by-customer {
+          margin-left: 6em;
+          box-shadow: 0.3em 0.3em #efefef;
+        }
+        .event.by-worker {
+          margin-right: 6em;
+          box-shadow: -0.3em 0.3em #efefef;
+        }
+
+        .event p {
+          margin: 0.5em 0;
+          padding: 0.4em;
+        }
+
+        .event footer {
+          margin: 0.5em 0;
+          font-size: 90%;
+        }
+
+        .event .header {
+          background-color: transparent;
+          color: black;
+          box-shadow: none;
+          font-weight: bolder;
+        }
+
+        .event .header p {
+          position: absolute;
+        }
+        .event.by-customer .header p {
+          left: -6em;
+        }
+        .event.by-worker .header p {
+          right: -6em;
+        }
+
+        .event.by-customer .header p::after {
+          content: "\261E  ";
+        }
+        .event.by-worker .header p::before {
+          content: "\261C  ";
+        }
+
+        .event .footer {
+          color: gray;
+          text-align: right;
+        }
+
+        .event footer p {
+          margin: 0;
         }
 
         textarea {
@@ -1271,6 +1458,18 @@ sub process ($$) {
 
         pre {
           white-space: pre-wrap;
+          background-color: #f7fff7;
+          padding: 0.5em;
+        }
+
+        a:hover {
+          background-color: #f7fff7;
+        }
+
+        a[href^="#"] {
+          text-decoration: none;
+          padding-bottom: 2px;
+          border-bottom: 1px dashed;
         }
 
         .use-sandbox-warning {
@@ -1284,6 +1483,28 @@ sub process ($$) {
 
         .status-reviewable {
           background-color: #ffefe5;
+        }
+
+        .for-mygengo-customer {
+          background-color: #ffefe5;
+        }
+        .for-mygengo-customer th,
+        .for-mygengo-customer td {
+          border: #ffefe5 3px solid;
+        }
+        .for-mygengo-translator {
+          background-color: #E5F5FA;
+        }
+        .for-mygengo-translator th,
+        .for-mygengo-translator td {
+          border: #E5F5FA 3px solid;
+        }
+        .for-mygengo-admin {
+          background-color: #fafafa;
+        }
+        .for-mygengo-admin th,
+        .for-mygengo-admin td {
+          border: #fafafa 3px solid;
         }
       });
       $app->throw;
@@ -1387,7 +1608,7 @@ sub post_approved_job_to_repo ($$$) {
           msgargs => $app->text_param ('msgargs'),
           target_lang => $job_row->get ('target_lang'),
           body => $body,
-          comment => $app->text_param ('comment-for-consumer'),
+          comment => $app->text_param ('comment-for-customer'),
           additional_tag => $tag,
         };
     if ($res->is_error) {

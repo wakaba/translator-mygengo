@@ -34,6 +34,10 @@ sub comment_is_public ($) {
   return undef;
 } # comment_is_public
 
+sub comment_for_customer ($) {
+  return undef;
+} # comment_for_customer
+
 sub rating ($) {
   return undef;
 } # rating

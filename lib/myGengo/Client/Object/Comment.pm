@@ -65,6 +65,7 @@ sub label ($) {
 } # label
 
 sub comment_for_translator ($) {
+  return undef if $_[0]->author_type eq 'worker';
   if ($_[0]->{data}) {
     return $_[0]->{data}->{body};
   } elsif ($_[0]->row) {
@@ -73,5 +74,16 @@ sub comment_for_translator ($) {
     return undef;
   }
 } # comment_for_translator
+
+sub comment_for_customer ($) {
+  return undef if $_[0]->author_type eq 'customer';
+  if ($_[0]->{data}) {
+    return $_[0]->{data}->{body};
+  } elsif ($_[0]->row) {
+    return $_[0]->row->get ('body');
+  } else {
+    return undef;
+  }
+} # comment_for_customer
 
 1;
