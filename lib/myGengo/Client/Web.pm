@@ -900,6 +900,7 @@ sub process ($$) {
                   var tr = this.parentNode.parentNode;
                   tr.parentNode.removeChild (tr.nextSibling);
                   tr.parentNode.removeChild (tr);
+                  updateUnitCount (this.form);
                 " data-confirm="Delete this item?">Delete</button>
             <tr>
               <td class="for-mygengo-translator text-col">
@@ -928,7 +929,9 @@ sub process ($$) {
 
             <form action="/job/submit" method=POST onsubmit="
               return confirm (this.getAttribute ('data-confirm'));
-            " data-confirm="Submit these jobs?" class=job-submit-form>
+            " data-confirm="Submit these jobs?" oninput="
+              updateUnitCount (this);
+            " class=job-submit-form>
               <table class="job-submit-texts">
                 <thead>
                   <tr>
@@ -964,7 +967,10 @@ sub process ($$) {
                 <tbody>
                   <tr>
                     <th>Source language
-                    <td><select name=source-lang>%s</select>
+                    <td>
+                      <select name=source-lang onchange="
+                        updateUnitCount (this.form);
+                      ">%s</select>
                   <tr>
                     <th>Target language
                     <td><select name=target-lang>%s</select>
@@ -984,6 +990,37 @@ sub process ($$) {
                       Submit as a group
                     </label>
                 <tfoot>
+                  <tr>
+                    <th>Unit count
+                    <td>
+                      <output id=unit-count></output>
+                      <script>
+                        function updateUnitCount (form) {
+                          var els = form.elements;
+                          var unitType = {
+                            ja: 'char',
+                            zh: 'char'
+                          }[els['source-lang'].value] || 'word';
+                          var count = 0;
+                          for (var i = 0; i < els.length; i++) {
+                            var el = els[i];
+                            if (el.name == 'source-body') {
+                              var value = el.value.replace
+                                  (/\[\[\[.*?\]\]\]/g, '');
+                              if (unitType == 'char') {
+                                value = value.replace (/\s+/g, '');
+                                count += value.length;
+                              } else {
+                                count += value.split (/\s+/).length;
+                              }
+                            }
+                          }
+                          document.getElementById ('unit-count').textContent
+                              = count;
+                        } // updateUnitCount
+                        updateUnitCount
+                            (document.forms[document.forms.length - 1]);
+                      </script>
                   <tr>
                     <td colspan=2>
                       <button type=submit name=send value=1>Submit</button>
@@ -1272,6 +1309,10 @@ sub process ($$) {
         tfoot td {
           text-align: center;
           padding: 0.5em;
+        }
+        
+        tfoot th + td {
+          text-align: left;
         }
 
         .item-list .text-col {
