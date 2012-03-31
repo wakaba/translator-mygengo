@@ -1021,6 +1021,7 @@ sub process ($$) {
                         updateUnitCount
                             (document.forms[document.forms.length - 1]);
                       </script>
+                      <p class=info><a href="http://mygengo.com/how-it-works/pricing-languages/" target=_blank>Price</a>
                   <tr>
                     <td colspan=2>
                       <button type=submit name=send value=1>Submit</button>
@@ -1531,6 +1532,10 @@ sub process ($$) {
         }
         .item-list tbody tr.status-reviewable:nth-child(2n) {
           background-color: #ffefe5;
+        }
+
+        .info {
+          text-align: right;
         }
 
         .for-mygengo-customer {
