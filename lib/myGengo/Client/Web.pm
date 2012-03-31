@@ -229,7 +229,9 @@ sub process ($$) {
 
         sprintf q{
             <tr class="status-%s">
-              <th><a href="%s">%d</a>
+              <th>
+                <a href="%s">%d</a>
+                <a href="%s" target=_blank class=newtab>[New tab]</a>
               <td class=lang-col>%s
               <td class=text-col lang="%s">%s
               <td class=lang-col>%s
@@ -239,6 +241,7 @@ sub process ($$) {
               htescape $_->status,
               htescape $_->path . ($sort_key eq 'comments' ? '#comments' : ''),
               $_->job_id,
+              htescape $_->path . ($sort_key eq 'comments' ? '#comments' : ''),
               htescape lang $_->source_lang,
               htescape $_->source_lang,
               htescape (substr $_->source_body, 0, 100),
@@ -1127,7 +1130,9 @@ sub process ($$) {
         }
 
         table {
-          margin: 0 0 0 1em;
+          margin: 0;
+          padding: 0 0 0 1em;
+          width: 100%;
         }
 
         nav.panel {
@@ -1142,6 +1147,7 @@ sub process ($$) {
 
         nav.panel table {
           margin: 0;
+          padding: 0;
           border-spacing: 2px;
         }
 
@@ -1155,10 +1161,7 @@ sub process ($$) {
 
         nav.panel table th {
           width: 40%;
-        }
-
-        .prop-list {
-          width: 90%;
+          line-height: 1;
         }
 
         .item-list tbody tr:nth-child(2n) {
@@ -1176,6 +1179,7 @@ sub process ($$) {
         th {
           background-color: #89ca67;
           color: #fff;
+          line-height: 1.5;
         }
         th:first-child {
           text-align: left;
@@ -1189,6 +1193,17 @@ sub process ($$) {
         th a {
           color: inherit;
         }
+        th a.newtab {
+          display: block;
+          text-align: right;
+          font-size: 70%;
+          font-weight: normal;
+          white-space: nowrap;
+          text-decoration: none;
+        }
+        th a.newtab:hover {
+          text-decoration: underline;
+        }
 
         th, td {
           padding: 0.2em;
@@ -1199,6 +1214,7 @@ sub process ($$) {
         td textarea,
         td select {
           width: 100%;
+          box-sizing: border-box;
         }
 
         tfoot td {
