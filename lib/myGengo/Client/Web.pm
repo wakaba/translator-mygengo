@@ -51,6 +51,9 @@ sub lang ($) {
     ja => 'Japanese',
     en => 'English',
     fr => 'French',
+    es => 'Spanish',
+    de => 'German',
+    it => 'Italish',
   }->{$_[0]} || $_[0];
 } # lang
 
@@ -69,9 +72,15 @@ sub header_html ($$) {
       <h1>myGengo Jobs</h1>
       <nav>
         <a href="/job/">Jobs</a>
-        <a href="/account">Status</a>
+        <a href="/account">Account</a>
       </nav>
     </header>
+    <script>
+      function toggleAction (id) {
+        var el = document.getElementById (id);
+        el.hidden = !el.hidden;
+      } // toggleAction
+    </script>
 
     %s
   }, $app->mygengo_webservice->is_production ? q{} : q{
@@ -88,7 +97,9 @@ sub options_html (;%) {
         ? '<option value="">Any'
         : ''
   ) . join '', map {
-    sprintf '<option value="%s" %s>%s',
+    sprintf '<option value="%s" class="%s-%s" %s>%s',
+        htescape $_->[0],
+        htescape $args{class_prefix} || '',
         htescape $_->[0],
         (defined $args{current_value} and $args{current_value} eq $_->[0]
              ? 'selected' : ''),
@@ -98,7 +109,7 @@ sub options_html (;%) {
 
 sub lang_options_html (;%) {
   return options_html @_, avail_options => [
-    map { [$_, lang $_] } qw(ja en fr)
+    map { [$_, lang $_] } qw(ja en fr es it de)
   ];
 } # lang_options_html
 
@@ -115,7 +126,7 @@ sub status ($) {
 sub status_options_html (;%) {
   return options_html @_, avail_options => [
     map { [$_, status $_] } qw(reviewable available approved held)
-  ];
+  ], class_prefix => 'status';
 } # status_options_html
 
 sub sync_jobs_from_res ($;%) {
@@ -209,7 +220,7 @@ sub process ($$) {
            })->find_all (offset => 0, limit => 100);
 
       my $job_trs = join '', map {
-        my $target_html = htescape $_->target_body;
+        my $target_html = htescape substr $_->target_body, 0, 100;
         if ($target_html eq '' and 
             $_->target_has_preview) {
           $target_html = sprintf q{<img src="%s">},
@@ -217,19 +228,20 @@ sub process ($$) {
         }
 
         sprintf q{
-            <tr>
-              <th title="Updated: %s"><a href="%s">%d</a>
-              <td>%s
-              <td lang="%s">%s
-              <td>%s
-              <td lang="%s">%s
+            <tr class="status-%s">
+              <th><a href="%s">%d</a>
+              <td class=lang-col>%s
+              <td class=text-col lang="%s">%s
+              <td class=lang-col>%s
+              <td class=text-col lang="%s">%s
               <td>%s
         },
-              htescape timestamp $_->updated,
+              htescape $_->status,
               htescape $_->path . ($sort_key eq 'comments' ? '#comments' : ''),
               $_->job_id,
               htescape lang $_->source_lang,
-              htescape $_->source_lang, htescape $_->source_body,
+              htescape $_->source_lang,
+              htescape (substr $_->source_body, 0, 100),
               htescape lang $_->target_lang,
               htescape $_->target_lang, $target_html,
               htescape status $_->status;
@@ -238,89 +250,101 @@ sub process ($$) {
       my $html = sprintf q{
           <!DOCTYPE HTML>
           <html lang=en>
-          <title>Jobs</title>
+          <title>Submitted jobs - myGengo job manager</title>
           <link rel=stylesheet href="/css/mygengo-client">
           %s
-          <h1>Jobs</h1>
-
-          <nav>
-            <p>
-              <strong>Status</strong>:
-              <a href="/job/?status=reviewable">Reviewable</a>
-              <a href="/job/?status=approved">Approved</a>
-              <a href="/job/?status=available">Available</a>
-              <a href="/job/?status=held">Held</a>
-          </nav>
-
-          <table>
-            <thead>
-              <tr>
-                <th rowspan=2><abbr title="Job ID">#</abbr>
-                <th colspan=2>
-                  Source
-                <th colspan=2>
-                  Target
-                <th rowspan=2>Status
-              <tr>
-                <th><abbr title=Language>Lang</abbr>
-                <th>Text
-                <th><abbr title=Language>Lang</abbr>
-                <th>Text
-            <tbody>
-              %s
-          </table>
-
-          <nav>
-            <form action="/job/" method=get>
-              <table>
-                <tbody>
-                  <tr>
-                    <th>Status
-                    <td><select name=status>%s</select>
-                  <tr>
-                    <th>Source language
-                    <td><select name=source-lang>%s</select>
-                  <tr>
-                    <th>Target language
-                    <td><select name=target-lang>%s</select>
-                  <tr>
-                    <th>Job group <abbr title=ID>#</abbr>
-                    <td><input type=number name=group-id value="%s">
-                  <tr>
-                    <th>Message ID
-                    <td><input name=msgid value="%s">
-                  <tr>
-                    <th>Sort by
-                    <td><select name=sort>%s</select>
-                <tfoot>
-                  <tr>
-                    <td colspan=2><button type=submit>Show</button>
-              </table>
-            </form>
-          </nav>
 
           <section>
-            <h2>Actions</h2>
+            <h1>Submitted jobs</h1>
 
-            <menu>
-              <li><a href=/job/submit>Submit jobs</a>
-              <li>
-                <form action=/job/sync method=POST>
-                  <button type=submit>
-                    Sync recent jobs
-                  </button>
-                </form>
-              <li><form method=POST>
-                <label>Job
-                #<input type=number value="" onchange="
-                  this.form.action = '/job/' + this.value + '/sync';
-                " oninput="
-                  this.form.action = '/job/' + this.value + '/sync';
-                " required></label>
-                <button type=submit>Sync</button>
+            <nav>
+              <p>
+                <strong>Status</strong>:
+                <a href="/job/?status=reviewable" class=status-reviewable>Reviewable</a>
+                <a href="/job/?status=approved" class=status-approved>Approved</a>
+                <a href="/job/?status=available" class=status-available>Available</a>
+            </nav>
+
+            <table class=item-list>
+              <thead>
+                <tr>
+                  <th rowspan=2><abbr title="Job ID">#</abbr>
+                  <th colspan=2>
+                    Source
+                  <th colspan=2>
+                    Target
+                  <th rowspan=2>Status
+                <tr>
+                  <th class=lang-col><abbr title=Language>Lang</abbr>
+                  <th class=text-col>Text
+                  <th class=lang-col><abbr title=Language>Lang</abbr>
+                  <th class=text-col>Text
+              <tbody>
+                %s
+            </table>
+
+            <nav class=panel>
+              <form action="/job/" method=get>
+                <table>
+                  <caption>Filtering</caption>
+                  <tbody>
+                    <tr>
+                      <th>Status
+                      <td><select name=status>%s</select>
+                    <tr>
+                      <th>Source language
+                      <td><select name=source-lang>%s</select>
+                    <tr>
+                      <th>Target language
+                      <td><select name=target-lang>%s</select>
+                    <tr>
+                      <th>Job group <abbr title=ID>#</abbr>
+                      <td><input type=number name=group-id value="%s">
+                    <tr>
+                      <th>Message ID
+                      <td><input name=msgid value="%s">
+                    <tr>
+                      <th>Sort by
+                      <td><select name=sort>%s</select>
+                  <tfoot>
+                    <tr>
+                      <td colspan=2><button type=submit>Show</button>
+                </table>
               </form>
-            </menu>
-          </section>
+            </nav>
+
+            <section>
+              <h2>Actions</h2>
+
+              <menu>
+                <li><a href=/job/submit>Submit new jobs</a>
+                <li>
+                  <a href="javascript:toggleAction('syncrecent')">
+                    Sync recent jobs
+                  </a>
+                  <form action=/job/sync method=POST hidden
+                      id=syncrecent class=details>
+                    <button type=submit>
+                      Sync recent jobs with myGengo server
+                    </button>
+                  </form>
+                <li>
+                  <a href="javascript:toggleAction('syncajob')">
+                    Sync a job
+                  </a>
+                  <form method=POST hidden id=syncajob class=details>
+                    <label>
+                      Job #<input type=number value="" onchange="
+                             this.form.action = '/job/' + this.value + '/sync';
+                           " oninput="
+                             this.form.action = '/job/' + this.value + '/sync';
+                           " required>
+                    </label>
+                    <button type=submit>Sync with myGengo server</button>
+                  </form>
+              </menu>
+            </section>
+         </section>
         }, $class->header_html ($app), $job_trs,
             status_options_html (with_any => 1, current_value => $status),
             lang_options_html (with_any => 1, current_value => $source_lang),
@@ -1002,23 +1026,26 @@ sub process ($$) {
     my $html = sprintf q{
       <!DOCTYPE HTML>
       <html lang=en>
-      <title>Account information</title>
+      <title>Account status information - myGengo job manager</title>
       <link rel=stylesheet href="/css/mygengo-client">
       %s
-      <h1>Account information</h1>
 
-      <table>
-        <tbody>
-          <tr>
-            <th>Registered
-            <td>%s
-          <tr>
-            <th>Credits spent
-            <td>%s
-          <tr>
-            <th>Credits available
-            <td>%s
-      </table>
+      <section>
+        <h1>Account status information</h1>
+
+        <table class=prop-list>
+          <tbody>
+            <tr>
+              <th>Registered
+              <td>%s
+            <tr>
+              <th>Credits spent
+              <td>%s
+            <tr>
+              <th>Credits available
+              <td>%s
+        </table>
+      </section>
     },
         $class->header_html ($app),
         htescape timestamp $stats->data->{user_since},
@@ -1032,25 +1059,28 @@ sub process ($$) {
       $http->set_response_header ('Content-Type' => 'text/css; charset=utf-8');
       $http->send_response_body_as_text (q{
         h1, h2 {
-          background-color: #F9F9F9;
-          color: black;
+          color: white;
           padding: 0.2em 0.4em;
         }
 
         h1 {
           font-size: 150%;
+          border-top-right-radius: 0.5em;
         }
         h2 {
           font-size: 130%;
+          border-top-left-radius: 0.5em;
+          border-top-right-radius: 0.5em;
         }
 
         header {
           display: block;
           position: relative;
-          border: 1px solid #AAAAAA;
-          background-color: #F9F9F9;
-          color: blank;
+          background-color: #558100;
+          color: white;
           padding: 0.4em;
+          border-radius: 0.5em;
+          box-shadow: 0.2em 0.2em #eee;
         }
         header h1 {
           background-color: transparent;
@@ -1059,8 +1089,25 @@ sub process ($$) {
         header nav {
           display: block;
           position: absolute;
-          top: 0.7em;
-          right: 0.7em;
+          top: 0.8em;
+          right: 0.8em;
+          margin: 0;
+          padding: 0.4em;
+          background-color: white;
+          border-radius: 0.4em;
+        }
+        header nav a {
+          margin-left: 0.5em;
+          margin-right: 0.5em;
+          letter-spacing: 0.2em;
+        }
+
+        section > h1, h2 {
+          background-color: #558100;
+          background: -webkit-gradient(linear, left bottom, right top,  
+                                       from(#558100), to(#89ca67));
+          background: -moz-linear-gradient(left bottom, 
+                                           #558100, #89ca67);
         }
 
         section {
@@ -1070,6 +1117,7 @@ sub process ($$) {
 
         nav {
           display: block;
+          margin: 0 0 0 1em;
           text-align: right;
           font-size: 90%;
           padding: 0.3em;
@@ -1079,13 +1127,46 @@ sub process ($$) {
         }
 
         table {
-          width: 100%;
+          margin: 0 0 0 1em;
         }
 
-        nav table {
-          width: 40%;
+        nav.panel {
+          background-color: #efefef;
+          margin: 0.5em;
           margin-left: auto;
-          margin-right: 0;
+          padding: 0.6em 0.4em;
+          width: 30%;
+          border-radius: 0.9em;
+          font-size: 80%;
+        }
+
+        nav.panel table {
+          margin: 0;
+          border-spacing: 2px;
+        }
+
+        nav.panel table caption {
+          padding: 0.3em;
+          font-weight: bolder;
+          background-color: #89ca67;
+          color: white;
+          border: 2px #efefef solid;
+        }
+
+        nav.panel table th {
+          width: 40%;
+        }
+
+        .prop-list {
+          width: 90%;
+        }
+
+        .item-list tbody tr:nth-child(2n) {
+          background-color: #f7fff7;
+        }
+
+        th, td {
+          min-height: 2em;
         }
 
         form table th {
@@ -1093,8 +1174,8 @@ sub process ($$) {
         }
 
         th {
-          background-color: #F9F9F9;
-          color: black;
+          background-color: #89ca67;
+          color: #fff;
         }
         th:first-child {
           text-align: left;
@@ -1105,6 +1186,10 @@ sub process ($$) {
         tbody th {
           text-align: left;
         }
+        th a {
+          color: inherit;
+        }
+
         th, td {
           padding: 0.2em;
         }
@@ -1121,12 +1206,42 @@ sub process ($$) {
           padding: 0.5em;
         }
 
+        .item-list .text-col {
+          width: 40%;
+        }
+        .item-list td.text-col {
+          font-size: 80%;
+          overflow: hidden;
+        }
+
+        .prop-list th {
+          width: 40%;
+        }
+
         .job-submit-texts td + td {
           text-align: center;
         }
 
+        menu {
+          margin: 0 0 10em 1em;
+          padding: 0;
+        }
+
         menu li {
-          padding: 0.3em;
+          display: block;
+          margin: 0 0 0.3em 0;
+          padding: 0;
+        }
+
+        menu li::before {
+          content: "\261E  "
+        }
+
+        menu .details {
+          background-color: #efefef;
+          margin: 0.5em;
+          padding: 0.6em 0.4em;
+          border-radius: 0.9em;
         }
 
         textarea {
@@ -1148,6 +1263,11 @@ sub process ($$) {
           padding: 0.3em;
           font-size: 160%;
           text-align: center;
+          background-color: #ffefe5;
+        }
+
+        .status-reviewable {
+          background-color: #ffefe5;
         }
       });
       $app->throw;
