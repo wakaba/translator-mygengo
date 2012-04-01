@@ -1,0 +1,7 @@
+## ------ Wanage configs ------
+
+$Wanage::HTTP::UseXForwardedFor = 1;
+$Wanage::HTTP::UseXForwardedHost = 1;
+$Wanage::HTTP::UseXForwardedScheme = 1;
+
+1;

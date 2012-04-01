@@ -1,0 +1,41 @@
+Translation tools - myGengo job manager
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Install
+
+  $ git clone git://github.com/wakaba/translator-mygengo.git
+  $ cd translator-mygengo
+  $ git submodule update --init
+  $ make
+  $ cp config/mysql/dsns.json.sample config/mysql/dsns.json
+  $ cp config/warabe/app-config.pl.sample config/warabe/app-config.pl
+  $ cp config/translator/repo.json.sample config/translator/repo.json
+  $ cp config/mygengo/account.json.sample config/mygengo/account.json
+  $ ... edit these config files ...
+
+* Usage
+
+  $ MYGENGO_CLIENT_MYSQL_DSNS_JSON=config/mysql/dsns.json \
+    MYGENGO_CLIENT_WARABE_CONFIG_PM=config/warabe/app-config.pl \
+    MYGENGO_CLIENT_TRANSLATION_REPOSITORY_JSON=config/translator/repo.json \
+    MYGENGO_CLIENT_MYGENGO_ACCOUNT_JSON=config/mygengo/account.json \
+    plackup bin/server.psgi
+
+* See also
+
+Human Translation, Translation Services and Translation API | myGengo
+<http://mygengo.com/>.
+
+Translation API - Integrate professional translation directly into
+your applications. <http://mygengo.com/api/>.
+
+* Author
+
+Wakaba <w@suika.fam.cx>.
+
+* License
+
+Copyright 2012 Wakaba <w@suika.fam.cx>.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.

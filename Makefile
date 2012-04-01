@@ -3,7 +3,7 @@ PERL_VERSION = latest
 PERL_PATH = $(abspath local/perlbrew/perls/perl-$(PERL_VERSION)/bin)
 PROVE = prove
 
-all:
+all: config/perl/libs.txt
 
 ## ------ Deps ------
 
